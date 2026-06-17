@@ -1,19 +1,48 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+datasource db {
+  provider = "postgresql"
+}
 
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
 }
 
-datasource db {
-  provider = "postgresql"
+model User {
+  id          String       @id @default(uuid())
+  name        String
+  email       String       @unique
+  theme_color String
+  tasks       Task[]
+  teams       TeamMember[]
 }
 
-model User {
-  id   Int    @id @default(autoincrement())
-  name String
-  age  Int?
+model Team {
+  id        String       @id @default(uuid())
+  team_name String
+  members   TeamMember[]
+  tasks     Task[]
+}
+
+model TeamMember {
+  team_id String
+  user_id String
+  team    Team   @relation(fields: [team_id], references: [id], onDelete: Cascade)
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@id([team_id, user_id])
+}
+
+model Task {
+  id                String   @id @default(uuid())
+  title             String
+  parent_id         String?
+  parent            Task?    @relation("TaskToTask", fields: [parent_id], references: [id], onDelete: Cascade)
+  subtasks          Task[]   @relation("TaskToTask")
+  estimated_minutes Int
+  progress_rate     Int      @default(0)
+  deadline          DateTime
+  team_id           String?
+  team              Team?    @relation(fields: [team_id], references: [id], onDelete: Cascade)
+  assigned_user_id  String?
+  assigned_user     User?    @relation(fields: [assigned_user_id], references: [id], onDelete: SetNull)
 }
