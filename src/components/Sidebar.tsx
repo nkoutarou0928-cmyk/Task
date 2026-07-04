@@ -61,86 +61,102 @@ export const Sidebar: React.FC = () => {
         overflowY: 'auto',
         background: 'var(--bg-panel)',
         borderLeft: '1px solid var(--border-color)',
-        gap: '24px'
+        gap: '20px'
       }}
     >
-      <div>
+      {/* Title Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <ShieldCheck size={20} style={{ color: 'var(--accent-blue)' }} />
         <h2 
           style={{ 
             fontFamily: 'var(--font-display)', 
             fontSize: '18px', 
             fontWeight: 800,
-            color: 'var(--accent-blue)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            marginBottom: '16px',
-            textTransform: 'uppercase',
+            color: 'var(--text-primary)',
             letterSpacing: '0.5px'
           }}
         >
-          <ShieldCheck size={18} />
           シミュレーター管理
         </h2>
+      </div>
 
-        {/* User context selector */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-            操作中のユーザー (JWT認可)
-          </span>
-          <div style={{ display: 'flex', gap: '6px' }}>
-            {users.map((u) => {
-              const isActive = u.id === currentUser.id;
-              return (
-                <button
-                  key={u.id}
-                  onClick={() => setCurrentUser(u)}
+      {/* 1. 操作中のユーザー Card */}
+      <div 
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+          background: 'var(--bg-main)',
+          border: '1px solid var(--border-color)',
+          borderRadius: '16px',
+          padding: '16px',
+          boxShadow: '0 2px 8px rgba(138, 126, 114, 0.02)'
+        }}
+      >
+        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          👤 操作中のユーザー (JWT認可)
+        </span>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          {users.map((u) => {
+            const isActive = u.id === currentUser.id;
+            return (
+              <button
+                key={u.id}
+                onClick={() => setCurrentUser(u)}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  padding: '8px 4px',
+                  borderRadius: '12px',
+                  background: isActive ? 'var(--bg-card-hover)' : 'transparent',
+                  border: isActive ? `1.5px solid ${u.theme_color}` : '1.5px solid var(--border-color)',
+                  cursor: 'pointer',
+                  transition: 'var(--transition-fast)',
+                }}
+              >
+                <span 
                   style={{
-                    flex: 1,
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    backgroundColor: u.theme_color,
                     display: 'flex',
-                    flexDirection: 'column',
                     alignItems: 'center',
-                    padding: '8px 4px',
-                    borderRadius: '12px',
-                    background: isActive ? 'var(--bg-card-hover)' : 'transparent',
-                    border: isActive ? `1.5px solid ${u.theme_color}` : '1.5px solid var(--border-color)',
-                    cursor: 'pointer',
-                    transition: 'var(--transition-fast)',
+                    justifyContent: 'center',
+                    color: '#fff',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    marginBottom: '4px'
                   }}
                 >
-                  <span 
-                    style={{
-                      width: '24px',
-                      height: '24px',
-                      borderRadius: '50%',
-                      backgroundColor: u.theme_color,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#fff',
-                      fontSize: '11px',
-                      fontWeight: 800,
-                      marginBottom: '4px'
-                    }}
-                  >
-                    {u.name[0]}
-                  </span>
-                  <span style={{ fontSize: '11px', fontWeight: 600, color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
-                    {u.name.split(' ')[0]}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+                  {u.name[0]}
+                </span>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+                  {u.name.split(' ')[0]}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)' }} />
-
-      {/* Time travel options */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-          タイムトラベル (時間変動アルゴリズム検証)
+      {/* 2. タイムトラベル Card */}
+      <div 
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+          background: 'var(--bg-main)',
+          border: '1px solid var(--border-color)',
+          borderRadius: '16px',
+          padding: '16px',
+          boxShadow: '0 2px 8px rgba(138, 126, 114, 0.02)'
+        }}
+      >
+        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          ⏰ タイムトラベル (時間変動検証)
         </span>
         <div 
           style={{ 
@@ -216,11 +232,20 @@ export const Sidebar: React.FC = () => {
         </button>
       </div>
 
-      <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)' }} />
-
-      {/* Teammate task action simulator */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+      {/* 3. 他メンバーの進捗共有 Card */}
+      <div 
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+          background: 'var(--bg-main)',
+          border: '1px solid var(--border-color)',
+          borderRadius: '16px',
+          padding: '16px',
+          boxShadow: '0 2px 8px rgba(138, 126, 114, 0.02)'
+        }}
+      >
+        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px', letterSpacing: '0.5px' }}>
           <Users size={12} />
           他メンバーの進捗共有 (WebSocket)
         </span>
@@ -288,13 +313,23 @@ export const Sidebar: React.FC = () => {
         </div>
       </div>
 
-      <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)' }} />
-
-      {/* FCM Notifications Panel */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: 1, minHeight: '120px' }}>
-        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
+      {/* 4. FCMプッシュ通知 Card */}
+      <div 
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+          background: 'var(--bg-main)',
+          border: '1px solid var(--border-color)',
+          borderRadius: '16px',
+          padding: '16px',
+          boxShadow: '0 2px 8px rgba(138, 126, 114, 0.02)',
+          minHeight: '180px'
+        }}
+      >
+        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px', letterSpacing: '0.5px' }}>
           <Bell size={12} style={{ color: 'var(--accent-yellow)' }} />
-          FCMプッシュ通知 (やばさ予測リマインダー)
+          FCMプッシュ通知 (やばさ予測)
         </span>
 
         <div 
@@ -303,11 +338,12 @@ export const Sidebar: React.FC = () => {
             flexDirection: 'column', 
             gap: '8px', 
             overflowY: 'auto',
-            maxHeight: '180px',
+            maxHeight: '140px',
             background: 'var(--bg-card-hover)',
             padding: '8px',
-            borderRadius: '16px',
-            border: '1px solid var(--border-color)'
+            borderRadius: '12px',
+            border: '1px solid var(--border-color)',
+            flex: 1
           }}
         >
           {notifications.length === 0 ? (
@@ -339,11 +375,21 @@ export const Sidebar: React.FC = () => {
         </div>
       </div>
 
-      <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)' }} />
-
-      {/* System events / Websocket logs */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', height: '220px' }}>
-        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
+      {/* 5. リアルタイム通信・システムログ Card */}
+      <div 
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+          background: 'var(--bg-main)',
+          border: '1px solid var(--border-color)',
+          borderRadius: '16px',
+          padding: '16px',
+          boxShadow: '0 2px 8px rgba(138, 126, 114, 0.02)',
+          height: '240px'
+        }}
+      >
+        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px', letterSpacing: '0.5px' }}>
           <Terminal size={12} />
           リアルタイム通信・システムログ
         </span>
@@ -355,7 +401,7 @@ export const Sidebar: React.FC = () => {
             fontFamily: 'monospace', 
             fontSize: '10.5px', 
             padding: '10px', 
-            borderRadius: '16px', 
+            borderRadius: '12px', 
             border: '1px solid var(--border-color)',
             overflowY: 'auto',
             display: 'flex',
@@ -401,7 +447,8 @@ export const Sidebar: React.FC = () => {
           alignItems: 'center',
           justifyContent: 'center',
           gap: '4px',
-          marginTop: 'auto'
+          marginTop: 'auto',
+          flexShrink: 0
         }}
       >
         <RefreshCw size={12} />

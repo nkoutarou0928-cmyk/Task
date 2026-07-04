@@ -6,6 +6,7 @@ import { Sidebar } from './components/Sidebar';
 import { ToastContainer } from './components/ToastContainer';
 import { Onboarding } from './components/Onboarding';
 import { Plus, CheckSquare, ListTree, BookOpen, Sun, Moon, RefreshCw } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const AppInner: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'tree'>('dashboard');
@@ -15,6 +16,8 @@ const AppInner: React.FC = () => {
   const [showOnboarding, setShowOnboarding] = useState(() => {
     return !localStorage.getItem('tasknow_onboarding_completed');
   });
+
+  const [devMode, setDevMode] = useState(false);
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('theme');
@@ -146,6 +149,38 @@ const AppInner: React.FC = () => {
               {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
             </button>
 
+            {/* Developer Mode Toggle */}
+            <button
+              onClick={() => setDevMode(!devMode)}
+              style={{
+                background: devMode ? 'rgba(139, 166, 169, 0.15)' : 'rgba(138, 126, 114, 0.08)',
+                border: devMode ? '1px solid var(--accent-blue)' : '1px solid var(--border-color)',
+                color: devMode ? 'var(--accent-blue)' : 'var(--text-primary)',
+                padding: '10px 16px',
+                borderRadius: '9999px',
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: '13px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'var(--transition-fast)'
+              }}
+              title="シミュレーター管理を表示"
+            >
+              <span>⚙️ 開発者モード</span>
+              <span 
+                style={{ 
+                  width: '6px', 
+                  height: '6px', 
+                  borderRadius: '50%', 
+                  backgroundColor: devMode ? 'var(--accent-blue)' : 'transparent',
+                  border: devMode ? 'none' : '1px solid var(--text-muted)',
+                  display: 'inline-block'
+                }} 
+              />
+            </button>
+
             {/* AI Reschedule Button */}
             <button 
               onClick={() => rebuildSchedule()}
@@ -211,8 +246,22 @@ const AppInner: React.FC = () => {
         </div>
       </div>
 
-      {/* Simulator Sidebar (Right) */}
-      <Sidebar />
+      {/* Simulator Sidebar (Right) - Animated Slide in */}
+      <AnimatePresence>
+        {devMode && (
+          <motion.div
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 360, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+            style={{ overflow: 'hidden', height: '100%', flexShrink: 0 }}
+          >
+            <div style={{ width: 360, height: '100%' }}>
+              <Sidebar />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Toast Alert popup overlay */}
       <ToastContainer />
