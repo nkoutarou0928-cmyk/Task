@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useSimulator } from '../context/SimulatorContext';
 import type { Task } from '../types';
 import { CircularProgressBar } from './CircularProgressBar';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ChevronDown, 
   ChevronRight, 
@@ -59,26 +60,34 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, depth, onEdit, onAddSubtask }
   // Remaining Time < Remaining Work * 1.5 AND task is not completed
   const isYabai = task.progress_rate < 100 && remainingHours < (remainingWorkHours * 1.5);
 
-  // Deadline Badge Styling
-  let badgeClass = 'badge-safe';
+  // Deadline Badge & Dynamic Urgency Styling
   let deadlineText = '';
 
   if (task.progress_rate >= 100) {
-    badgeClass = 'badge-done';
     deadlineText = '完了';
   } else if (remainingHours <= 0) {
-    badgeClass = 'badge-urgent';
     deadlineText = '期限切れ';
   } else if (remainingHours < 24) {
-    badgeClass = 'badge-urgent';
     deadlineText = `残り ${Math.round(remainingHours)}時間`;
   } else if (remainingHours < 72) {
-    badgeClass = 'badge-warning';
     deadlineText = `残り ${Math.round(remainingHours / 24)}日`;
   } else {
-    badgeClass = 'badge-safe';
     deadlineText = `残り ${Math.round(remainingHours / 24)}日`;
   }
+
+  const getUrgencyColor = () => {
+    if (task.progress_rate >= 100) return '#00f5d4'; // Completed (Safe / Emerald Green)
+    if (remainingHours < 24) return '#FF4D4D'; // Urgent (<24h / Red)
+    if (remainingHours < 72) return '#FFC107'; // Impending (<72h / Yellow)
+    return '#E0E0E0'; // Safe (>72h / Neutral Gray)
+  };
+
+  const urgencyColor = getUrgencyColor();
+  const badgeStyle = {
+    backgroundColor: `${urgencyColor}1a`, // 10% opacity
+    color: urgencyColor,
+    border: `1px solid ${urgencyColor}4d`, // 30% opacity
+  };
 
   // Handle simple checkbox click (0% or 100%)
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -87,180 +96,248 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, depth, onEdit, onAddSubtask }
     updateTaskProgress(task.id, newProgress);
   };
 
+  // Left 4px vertical indicator color:
+  const getUrgencyBorderColor = () => {
+    if (task.progress_rate >= 100) return '#9CA3AF'; // Completed tasks: grey
+    if (remainingHours <= 0) return '#FF4D4D'; // Expired: red
+    if (remainingHours < 24) return '#FF4D4D'; // Red
+    if (remainingHours < 72) return '#FFC107'; // Yellow
+    return '#9CA3AF'; // Grey
+  };
+  const borderLeftColor = getUrgencyBorderColor();
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
       {/* Task Row */}
       <div 
-        className={`task-row-container ${isYabai ? 'yabai-glow' : ''}`}
+        className={`task-row-container rounded-2xl shadow-lg border border-gray-100 dark:border-zinc-800 bg-white dark:bg-[#1E1E1E] text-black dark:text-white transition-all duration-300 ${isYabai ? 'yabai-glow' : ''}`}
+        onClick={() => {
+          if (isParent) {
+            setIsExpanded(!isExpanded);
+          }
+        }}
         style={{
           display: 'flex',
-          alignItems: 'center',
-          padding: '12px 16px',
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border-color)',
-          borderRadius: '12px',
-          marginBottom: '8px',
+          alignItems: 'stretch',
+          marginBottom: '12px',
           marginLeft: `${depth * 20}px`,
-          transition: 'var(--transition-smooth)',
-          boxShadow: isYabai ? 'var(--glow-red)' : 'none',
+          cursor: isParent ? 'pointer' : 'default',
+          boxShadow: isYabai ? 'var(--glow-red)' : undefined,
+          overflow: 'hidden'
         }}
       >
-        {/* Toggle Folder Collapse Button */}
-        <div style={{ width: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {isParent ? (
-            <button 
-              onClick={() => setIsExpanded(!isExpanded)}
+        {/* Left vertical line (width: 4px) */}
+        <div 
+          style={{
+            width: '4px',
+            backgroundColor: borderLeftColor,
+            flexShrink: 0,
+            alignSelf: 'stretch'
+          }}
+        />
+
+        {/* Row Content */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            padding: '12px 16px',
+            flex: 1,
+            gap: '12px',
+            width: '100%'
+          }}
+        >
+          {/* Toggle Folder Collapse Button */}
+          <div style={{ width: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {isParent ? (
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsExpanded(!isExpanded);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '4px'
+                }}
+              >
+                {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+              </button>
+            ) : null}
+          </div>
+
+          {/* Checkbox (only for leaf tasks) */}
+          {!isParent ? (
+            <input 
+              type="checkbox" 
+              checked={task.progress_rate === 100}
+              onClick={(e) => e.stopPropagation()}
+              onChange={handleCheckboxChange}
               style={{
-                background: 'none',
-                border: 'none',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                padding: '4px'
+                width: '18px',
+                height: '18px',
+                marginRight: '12px',
+                accentColor: 'var(--accent-blue)',
+                cursor: 'pointer'
               }}
-            >
-              {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-            </button>
-          ) : null}
-        </div>
-
-        {/* Checkbox (only for leaf tasks) */}
-        {!isParent ? (
-          <input 
-            type="checkbox" 
-            checked={task.progress_rate === 100}
-            onChange={handleCheckboxChange}
-            style={{
-              width: '18px',
-              height: '18px',
-              marginRight: '12px',
-              accentColor: 'var(--accent-blue)',
-              cursor: 'pointer'
-            }}
-          />
-        ) : (
-          <div style={{ width: '18px', marginRight: '12px' }} />
-        )}
-
-        {/* Task Info Content */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <span 
-              style={{ 
-                fontWeight: 600, 
-                fontSize: '15px',
-                color: task.progress_rate === 100 ? 'var(--text-muted)' : 'var(--text-primary)',
-                textDecoration: task.progress_rate === 100 ? 'line-through' : 'none'
-              }}
-            >
-              {task.title}
-            </span>
-
-            {/* Team indicator */}
-            {team && (
-              <span 
-                style={{ 
-                  display: 'inline-flex', 
-                  alignItems: 'center', 
-                  gap: '4px',
-                  fontSize: '11px',
-                  color: 'var(--accent-blue)',
-                  background: 'rgba(0, 240, 255, 0.08)',
-                  padding: '2px 6px',
-                  borderRadius: '4px',
-                  border: '1px solid rgba(0, 240, 255, 0.2)'
-                }}
-              >
-                <Users size={10} />
-                {team.team_name}
-              </span>
-            )}
-
-            {/* Warning indicator */}
-            {isYabai && (
-              <span 
-                style={{ 
-                  display: 'inline-flex', 
-                  alignItems: 'center', 
-                  gap: '4px',
-                  fontSize: '11px',
-                  color: 'var(--accent-red)',
-                  fontWeight: 700,
-                  animation: 'pulse 1.5s infinite'
-                }}
-              >
-                <AlertTriangle size={12} />
-                やばい！
-              </span>
-            )}
-          </div>
-
-          {/* Sub-info bar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-            {/* Workload */}
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Clock size={12} />
-              {task.estimated_minutes}分
-            </span>
-
-            {/* Deadline Date */}
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Calendar size={12} />
-              {deadlineDate.toLocaleDateString([], { month: 'short', day: 'numeric' })} 
-              {' '}{deadlineDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </span>
-
-            {/* Assignee Avatar */}
-            {assignee && (
-              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span 
-                  style={{
-                    width: '12px',
-                    height: '12px',
-                    borderRadius: '50%',
-                    backgroundColor: assignee.theme_color,
-                    display: 'inline-block'
-                  }}
-                />
-                {assignee.name}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Priority & Progress controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          {/* Priority Score badge */}
-          {task.progress_rate < 100 && (
-            <div className="priority-score" title="流動的優先度スコア P">
-              AI: {priorityScore}
-            </div>
+            />
+          ) : (
+            <div style={{ width: '18px', marginRight: '12px' }} />
           )}
 
-          {/* Deadline status badge */}
-          <span className={`badge ${badgeClass}`}>{deadlineText}</span>
+          {/* Task Info Content */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span 
+                style={{ 
+                  fontWeight: 600, 
+                  fontSize: '15px',
+                  color: task.progress_rate === 100 ? 'var(--text-muted)' : undefined,
+                  textDecoration: task.progress_rate === 100 ? 'line-through' : 'none'
+                }}
+                className="text-black dark:text-white"
+              >
+                {task.title}
+              </span>
 
-          {/* Progress Circular Bar / Slider Toggle */}
-          <div 
-            onClick={() => !isParent && setShowProgressSlider(!showProgressSlider)}
-            style={{ cursor: !isParent ? 'pointer' : 'default' }}
-            title={!isParent ? 'クリックして進捗率を調整' : '親タスクの自動計算された進捗率'}
-          >
-            <CircularProgressBar 
-              progress={task.progress_rate} 
-              size={42} 
-              strokeWidth={4.5}
-              color={isYabai ? 'var(--accent-red)' : 'var(--accent-blue)'}
-            />
+              {/* Team indicator */}
+              {team && (
+                <span 
+                  style={{ 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    gap: '4px',
+                    fontSize: '11px',
+                    color: 'var(--accent-blue)',
+                    background: 'rgba(0, 240, 255, 0.08)',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    border: '1px solid rgba(0, 240, 255, 0.2)'
+                  }}
+                >
+                  <Users size={10} />
+                  {team.team_name}
+                </span>
+              )}
+
+              {/* Warning indicator */}
+              {isYabai && (
+                <span 
+                  style={{ 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    gap: '4px',
+                    fontSize: '11px',
+                    color: 'var(--accent-red)',
+                    fontWeight: 700,
+                    animation: 'pulse 1.5s infinite'
+                  }}
+                >
+                  <AlertTriangle size={12} />
+                  やばい！
+                </span>
+              )}
+            </div>
+
+            {/* Sub-info bar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+              {/* Workload */}
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Clock size={12} />
+                {task.estimated_minutes}分
+              </span>
+
+              {/* Deadline Date */}
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Calendar size={12} />
+                {deadlineDate.toLocaleDateString([], { month: 'short', day: 'numeric' })} 
+                {' '}{deadlineDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+
+              {/* Assignee Avatar */}
+              {assignee && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span 
+                    style={{
+                      width: '12px',
+                      height: '12px',
+                      borderRadius: '50%',
+                      backgroundColor: assignee.theme_color,
+                      display: 'inline-block'
+                    }}
+                  />
+                  {assignee.name}
+                </span>
+              )}
+            </div>
           </div>
 
-          {/* Action buttons */}
-          <div style={{ display: 'flex', gap: '4px' }}>
-            {/* Add Subtask Button (only if depth < 2 to keep Max 3 levels) */}
-            {depth < 2 && (
+          {/* Priority & Progress controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }} onClick={(e) => e.stopPropagation()}>
+            {/* Priority Score badge */}
+            {task.progress_rate < 100 && (
+              <div className="priority-score" title="流動的優先度スコア P">
+                AI: {priorityScore}
+              </div>
+            )}
+
+            {/* Deadline status badge */}
+            <span className="badge" style={badgeStyle}>{deadlineText}</span>
+
+            {/* Progress Circular Bar / Slider Toggle */}
+            <div 
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isParent) setShowProgressSlider(!showProgressSlider);
+              }}
+              style={{ cursor: !isParent ? 'pointer' : 'default' }}
+              title={!isParent ? 'クリックして進捗率を調整' : '親タスクの自動計算された進捗率'}
+            >
+              <CircularProgressBar 
+                progress={task.progress_rate} 
+                size={isParent ? 52 : 42} 
+                strokeWidth={isParent ? 5 : 4.5}
+                color={urgencyColor}
+              />
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: '4px' }}>
+              {/* Add Subtask Button (only if depth < 2 to keep Max 3 levels) */}
+              {depth < 2 && (
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAddSubtask(task);
+                  }}
+                  className="action-btn"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-secondary)',
+                    borderRadius: '6px',
+                    padding: '6px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    transition: 'var(--transition-fast)'
+                  }}
+                  title="子タスクを追加"
+                >
+                  <Plus size={14} />
+                </button>
+              )}
+              
+              {/* Edit Button */}
               <button 
-                onClick={() => onAddSubtask(task)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(task);
+                }}
                 className="action-btn"
                 style={{
                   background: 'rgba(255, 255, 255, 0.05)',
@@ -273,55 +350,36 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, depth, onEdit, onAddSubtask }
                   alignItems: 'center',
                   transition: 'var(--transition-fast)'
                 }}
-                title="子タスクを追加"
+                title="編集"
               >
-                <Plus size={14} />
+                <Edit3 size={14} />
               </button>
-            )}
-            
-            {/* Edit Button */}
-            <button 
-              onClick={() => onEdit(task)}
-              className="action-btn"
-              style={{
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid var(--border-color)',
-                color: 'var(--text-secondary)',
-                borderRadius: '6px',
-                padding: '6px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                transition: 'var(--transition-fast)'
-              }}
-              title="編集"
-            >
-              <Edit3 size={14} />
-            </button>
 
-            {/* Delete Button */}
-            <button 
-              onClick={() => {
-                if (window.confirm(`本当に『${task.title}』を削除しますか？`)) {
-                  deleteTask(task.id);
-                }
-              }}
-              className="action-btn-danger"
-              style={{
-                background: 'rgba(255, 51, 102, 0.08)',
-                border: '1px solid rgba(255, 51, 102, 0.2)',
-                color: 'var(--accent-red)',
-                borderRadius: '6px',
-                padding: '6px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                transition: 'var(--transition-fast)'
-              }}
-              title="削除"
-            >
-              <Trash2 size={14} />
-            </button>
+              {/* Delete Button */}
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (window.confirm(`本当に『${task.title}』を削除しますか？`)) {
+                    deleteTask(task.id);
+                  }
+                }}
+                className="action-btn-danger"
+                style={{
+                  background: 'rgba(255, 51, 102, 0.08)',
+                  border: '1px solid rgba(255, 51, 102, 0.2)',
+                  color: 'var(--accent-red)',
+                  borderRadius: '6px',
+                  padding: '6px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  transition: 'var(--transition-fast)'
+                }}
+                title="削除"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -369,20 +427,28 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, depth, onEdit, onAddSubtask }
         </div>
       )}
 
-      {/* Recursive Children Rendering */}
-      {isParent && isExpanded && (
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {children.map((child) => (
-            <TaskNode 
-              key={child.id} 
-              task={child} 
-              depth={depth + 1} 
-              onEdit={onEdit} 
-              onAddSubtask={onAddSubtask} 
-            />
-          ))}
-        </div>
-      )}
+      {/* Recursive Children Rendering - Animated Accordion */}
+      <AnimatePresence initial={false}>
+        {isParent && isExpanded && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', width: '100%' }}
+          >
+            {children.map((child) => (
+              <TaskNode 
+                key={child.id} 
+                task={child} 
+                depth={depth + 1} 
+                onEdit={onEdit} 
+                onAddSubtask={onAddSubtask} 
+              />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -19,6 +19,7 @@ interface SimulatorContextType {
   deleteTask: (taskId: string) => void;
   advanceTime: (hours: number) => void;
   triggerCronCheck: () => void;
+  rebuildSchedule: () => Promise<void>;
   simulateTeammateAction: (teammateId: string, taskId: string, newProgress: number) => void;
   clearAllData: () => void;
   setTasksOrder: (orderedTasks: Task[]) => void;
@@ -49,7 +50,7 @@ export const SimulatorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [notifications, setNotifications] = useState<FCMNotification[]>([]);
   const [sortMode, setSortMode] = useState<'ai' | 'manual'>('ai');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  
+
   const tokenRef = useRef<string | null>(localStorage.getItem('jwt_token'));
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -108,11 +109,11 @@ export const SimulatorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // 4. Set default User if not selected
       const savedUser = localStorage.getItem('sim_current_user');
       let initialUser = savedUser ? JSON.parse(savedUser) : null;
-      
+
       if (!initialUser || !usersData.some(u => u.id === initialUser.id)) {
         initialUser = usersData[0] || { id: 'user-alice', name: 'A君 (Alice)', email: 'alice@univ.ac.jp', theme_color: '#ff4d6d' };
       }
-      
+
       setCurrentUser(initialUser);
       localStorage.setItem('sim_current_user', JSON.stringify(initialUser));
 
@@ -171,7 +172,7 @@ export const SimulatorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       ws.onmessage = async (event) => {
         const data = JSON.parse(event.data);
-        
+
         switch (data.type) {
           case 'CONNECTION_SUCCESS':
             break;
@@ -376,6 +377,20 @@ export const SimulatorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
+  // Rebuild schedule trigger
+  const rebuildSchedule = async () => {
+    try {
+      // Refresh task priority calculations and trigger predictions
+      await fetch(`${API_BASE}/api/v1/simulator/cron-check`, { method: 'POST' });
+      await fetchTasks();
+      addToast("スケジュールを再構築しました", "success");
+      addLocalEvent("システム", "流動的優先度スケジュールを再構築・再計算しました。", "success");
+    } catch (e: any) {
+      console.error(e);
+      addToast(`スケジュール再構築失敗: ${e.message}`, "warning");
+    }
+  };
+
   // Simulate teammate action
   // To simulate Bob making changes, we fetch Bob's token, make the REST post, and Alice receives it via WebSocket!
   const simulateTeammateAction = async (teammateId: string, taskId: string, newProgress: number) => {
@@ -455,6 +470,7 @@ export const SimulatorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         deleteTask,
         advanceTime,
         triggerCronCheck,
+        rebuildSchedule,
         simulateTeammateAction,
         clearAllData,
         setTasksOrder,

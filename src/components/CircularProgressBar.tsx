@@ -47,7 +47,10 @@ export const CircularProgressBar: React.FC<CircularProgressBarProps> = ({
           fill="transparent"
           strokeWidth={strokeWidth}
           strokeDasharray={`${circumference} ${circumference}`}
-          style={{ strokeDashoffset }}
+          style={{ 
+            strokeDashoffset,
+            transition: 'stroke-dashoffset 0.5s ease-in-out'
+          }}
           strokeLinecap="round"
           r={radius}
           cx={size / 2}

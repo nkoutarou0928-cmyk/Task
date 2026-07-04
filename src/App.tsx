@@ -1,15 +1,39 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SimulatorProvider, useSimulator } from './context/SimulatorContext';
 import { DashboardView } from './components/DashboardView';
 import { TaskTree, TaskFormModal } from './components/TaskTree';
 import { Sidebar } from './components/Sidebar';
 import { ToastContainer } from './components/ToastContainer';
-import { Plus, CheckSquare, ListTree, BookOpen } from 'lucide-react';
+import { Plus, CheckSquare, ListTree, BookOpen, Sun, Moon, RefreshCw } from 'lucide-react';
 
 const AppInner: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'tree'>('dashboard');
   const [showAddRootModal, setShowAddRootModal] = useState(false);
-  const { currentUser, tasks } = useSimulator();
+  const { currentUser, tasks, rebuildSchedule } = useSimulator();
+
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'light' || saved === 'dark') return saved;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+      root.style.setProperty('--bg-main', '#121212');
+      root.style.setProperty('--bg-card', 'rgba(30, 32, 48, 0.8)');
+      root.style.setProperty('--text-primary', '#FFFFFF');
+      root.style.setProperty('--text-secondary', '#a0a5b5');
+    } else {
+      root.classList.remove('dark');
+      root.style.setProperty('--bg-main', '#f8f9fa');
+      root.style.setProperty('--bg-card', 'rgba(255, 255, 255, 0.9)');
+      root.style.setProperty('--text-primary', '#161823');
+      root.style.setProperty('--text-secondary', '#4a4d5c');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
   // Calculate overall progress for the active user (all assigned leaf tasks)
   const userTasks = tasks.filter(t => t.assigned_user_id === currentUser.id);
@@ -20,12 +44,12 @@ const AppInner: React.FC = () => {
     : 0;
 
   return (
-    <div className="app-container">
+    <div className="app-container bg-white dark:bg-darkBg text-black dark:text-white transition-colors duration-300">
       {/* Main Workspace (Left) */}
       <div className="main-content">
-        <header className="dashboard-header">
+        <header className="dashboard-header flex justify-between items-center border-b pb-4 mb-6">
           <div>
-            <h1 className="dashboard-title">
+            <h1 className="dashboard-title text-2xl font-extrabold flex items-center gap-2">
               <BookOpen size={28} style={{ color: 'var(--accent-blue)' }} />
               GradTask AI
               <span 
@@ -50,14 +74,14 @@ const AppInner: React.FC = () => {
             </p>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             {/* User mini stats */}
             <div 
               style={{ 
                 display: 'flex', 
                 alignItems: 'center', 
                 gap: '10px', 
-                background: 'rgba(255,255,255,0.03)',
+                background: 'rgba(128,128,128,0.05)',
                 padding: '6px 12px',
                 borderRadius: '8px',
                 border: '1px solid var(--border-color)',
@@ -78,17 +102,48 @@ const AppInner: React.FC = () => {
               </span>
             </div>
 
+            {/* Dark Mode Toggle */}
+            <button
+              onClick={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
+              style={{
+                background: 'rgba(128,128,128,0.08)',
+                border: '1px solid var(--border-color)',
+                color: 'var(--text-primary)',
+                padding: '8px',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'var(--transition-fast)'
+              }}
+              title={theme === 'light' ? 'ダークモードに切り替え' : 'ライトモードに切り替え'}
+            >
+              {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+            </button>
+
+            {/* AI Reschedule Button */}
+            <button 
+              onClick={() => rebuildSchedule()}
+              className="bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90 active:scale-95 transition-all text-white font-bold text-sm px-5 py-2.5 rounded-full shadow-lg flex items-center gap-2 border-0 cursor-pointer"
+              title="遅れをリセットして再計算"
+            >
+              <RefreshCw size={14} />
+              AIリスケジュール
+            </button>
+
+            {/* New Task Button */}
             <button 
               onClick={() => setShowAddRootModal(true)}
               style={{
                 background: 'linear-gradient(135deg, var(--accent-blue) 0%, #00a8ff 100%)',
                 border: 'none',
                 color: 'var(--bg-main)',
-                padding: '10px 18px',
+                padding: '10px 14px',
                 borderRadius: '8px',
                 cursor: 'pointer',
                 fontWeight: 700,
-                fontSize: '13.5px',
+                fontSize: '13px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
@@ -96,7 +151,7 @@ const AppInner: React.FC = () => {
                 transition: 'var(--transition-fast)'
               }}
             >
-              <Plus size={16} />
+              <Plus size={14} />
               新規タスク
             </button>
           </div>
