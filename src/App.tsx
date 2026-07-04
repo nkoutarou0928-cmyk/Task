@@ -4,12 +4,17 @@ import { DashboardView } from './components/DashboardView';
 import { TaskTree, TaskFormModal } from './components/TaskTree';
 import { Sidebar } from './components/Sidebar';
 import { ToastContainer } from './components/ToastContainer';
+import { Onboarding } from './components/Onboarding';
 import { Plus, CheckSquare, ListTree, BookOpen, Sun, Moon, RefreshCw } from 'lucide-react';
 
 const AppInner: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'tree'>('dashboard');
   const [showAddRootModal, setShowAddRootModal] = useState(false);
-  const { currentUser, tasks, rebuildSchedule } = useSimulator();
+  const { currentUser, tasks, rebuildSchedule, setCurrentUser, users } = useSimulator();
+  
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    return !localStorage.getItem('tasknow_onboarding_completed');
+  });
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('theme');
@@ -47,8 +52,23 @@ const AppInner: React.FC = () => {
     ? Math.round((completedUserLeafTasks.length / userLeafTasks.length) * 100)
     : 0;
 
+  const handleOnboardingComplete = (username: string, themeColor: string) => {
+    localStorage.setItem('tasknow_onboarding_completed', 'true');
+    const baseUser = users[0] || currentUser;
+    const customized = {
+      ...baseUser,
+      name: username,
+      theme_color: themeColor
+    };
+    setCurrentUser(customized);
+    setShowOnboarding(false);
+  };
+
   return (
     <div className="app-container bg-[#FDFBF7] dark:bg-[#1F1A17] text-[#4A3E3D] dark:text-[#EAE3D8] transition-colors duration-300">
+      {showOnboarding && (
+        <Onboarding onComplete={handleOnboardingComplete} />
+      )}
       {/* Main Workspace (Left) */}
       <div className="main-content">
         <header className="dashboard-header flex justify-between items-center border-b pb-4 mb-6" style={{ borderColor: 'var(--border-color)' }}>
