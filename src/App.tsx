@@ -21,16 +21,20 @@ const AppInner: React.FC = () => {
     const root = window.document.documentElement;
     if (theme === 'dark') {
       root.classList.add('dark');
-      root.style.setProperty('--bg-main', '#121212');
-      root.style.setProperty('--bg-card', 'rgba(30, 32, 48, 0.8)');
-      root.style.setProperty('--text-primary', '#FFFFFF');
-      root.style.setProperty('--text-secondary', '#a0a5b5');
+      root.style.setProperty('--bg-main', '#1F1A17');
+      root.style.setProperty('--bg-card', '#2A231F');
+      root.style.setProperty('--border-color', '#3E342F');
+      root.style.setProperty('--text-primary', '#EAE3D8');
+      root.style.setProperty('--text-secondary', '#B5A89E');
+      root.style.setProperty('--text-muted', '#8A7E72');
     } else {
       root.classList.remove('dark');
-      root.style.setProperty('--bg-main', '#f8f9fa');
-      root.style.setProperty('--bg-card', 'rgba(255, 255, 255, 0.9)');
-      root.style.setProperty('--text-primary', '#161823');
-      root.style.setProperty('--text-secondary', '#4a4d5c');
+      root.style.setProperty('--bg-main', '#FDFBF7');
+      root.style.setProperty('--bg-card', '#FFFFFF');
+      root.style.setProperty('--border-color', '#EAE3D8');
+      root.style.setProperty('--text-primary', '#4A3E3D');
+      root.style.setProperty('--text-secondary', '#8A7E72');
+      root.style.setProperty('--text-muted', '#B5A89E');
     }
     localStorage.setItem('theme', theme);
   }, [theme]);
@@ -44,33 +48,33 @@ const AppInner: React.FC = () => {
     : 0;
 
   return (
-    <div className="app-container bg-white dark:bg-darkBg text-black dark:text-white transition-colors duration-300">
+    <div className="app-container bg-[#FDFBF7] dark:bg-[#1F1A17] text-[#4A3E3D] dark:text-[#EAE3D8] transition-colors duration-300">
       {/* Main Workspace (Left) */}
       <div className="main-content">
-        <header className="dashboard-header flex justify-between items-center border-b pb-4 mb-6">
+        <header className="dashboard-header flex justify-between items-center border-b pb-4 mb-6" style={{ borderColor: 'var(--border-color)' }}>
           <div>
-            <h1 className="dashboard-title text-2xl font-extrabold flex items-center gap-2">
+            <h1 className="dashboard-title text-2xl font-extrabold flex items-center gap-2" style={{ background: 'none', WebkitTextFillColor: 'initial', color: 'var(--text-primary)' }}>
               <BookOpen size={28} style={{ color: 'var(--accent-blue)' }} />
-              GradTask AI
+              Tasknow
               <span 
                 style={{ 
                   fontSize: '11px', 
-                  background: 'rgba(0, 240, 255, 0.12)', 
-                  border: '1px solid rgba(0, 240, 255, 0.3)', 
+                  background: 'rgba(139, 166, 169, 0.12)', 
+                  border: '1px solid rgba(139, 166, 169, 0.3)', 
                   color: 'var(--accent-blue)', 
                   padding: '2px 8px', 
-                  borderRadius: '4px',
+                  borderRadius: '9999px',
                   fontWeight: 600,
                   marginLeft: '8px',
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px'
                 }}
               >
-                v1.0 (大学生向け)
+                Cozy v1.0
               </span>
             </h1>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-              大学生のための流動的優先度タスク管理システム
+              温かみのあるオーガニックなタスク管理システム
             </p>
           </div>
 
@@ -81,9 +85,9 @@ const AppInner: React.FC = () => {
                 display: 'flex', 
                 alignItems: 'center', 
                 gap: '10px', 
-                background: 'rgba(128,128,128,0.05)',
+                background: 'rgba(138, 126, 114, 0.05)',
                 padding: '6px 12px',
-                borderRadius: '8px',
+                borderRadius: '9999px',
                 border: '1px solid var(--border-color)',
                 fontSize: '12px'
               }}
@@ -106,11 +110,11 @@ const AppInner: React.FC = () => {
             <button
               onClick={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
               style={{
-                background: 'rgba(128,128,128,0.08)',
+                background: 'rgba(138, 126, 114, 0.08)',
                 border: '1px solid var(--border-color)',
                 color: 'var(--text-primary)',
                 padding: '8px',
-                borderRadius: '8px',
+                borderRadius: '9999px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -125,7 +129,7 @@ const AppInner: React.FC = () => {
             {/* AI Reschedule Button */}
             <button 
               onClick={() => rebuildSchedule()}
-              className="bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90 active:scale-95 transition-all text-white font-bold text-sm px-5 py-2.5 rounded-full shadow-lg flex items-center gap-2 border-0 cursor-pointer"
+              className="bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90 active:scale-95 transition-all text-white font-bold text-sm px-5 py-2.5 rounded-full shadow-md flex items-center gap-2 border-0 cursor-pointer"
               title="遅れをリセットして再計算"
             >
               <RefreshCw size={14} />
@@ -136,18 +140,18 @@ const AppInner: React.FC = () => {
             <button 
               onClick={() => setShowAddRootModal(true)}
               style={{
-                background: 'linear-gradient(135deg, var(--accent-blue) 0%, #00a8ff 100%)',
+                background: 'var(--accent-blue)',
                 border: 'none',
-                color: 'var(--bg-main)',
-                padding: '10px 14px',
-                borderRadius: '8px',
+                color: '#FFF',
+                padding: '10px 18px',
+                borderRadius: '9999px',
                 cursor: 'pointer',
                 fontWeight: 700,
                 fontSize: '13px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
-                boxShadow: 'var(--glow-blue)',
+                boxShadow: '0 2px 8px rgba(139, 166, 169, 0.15)',
                 transition: 'var(--transition-fast)'
               }}
             >

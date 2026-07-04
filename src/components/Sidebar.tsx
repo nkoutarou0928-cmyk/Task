@@ -59,7 +59,7 @@ export const Sidebar: React.FC = () => {
         borderRight: 'none',
         padding: '20px',
         overflowY: 'auto',
-        background: 'rgba(15, 17, 26, 0.95)',
+        background: 'var(--bg-panel)',
         borderLeft: '1px solid var(--border-color)',
         gap: '24px'
       }}
@@ -101,9 +101,9 @@ export const Sidebar: React.FC = () => {
                     flexDirection: 'column',
                     alignItems: 'center',
                     padding: '8px 4px',
-                    borderRadius: '8px',
-                    background: isActive ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.2)',
-                    border: isActive ? `1.5px solid ${u.theme_color}` : '1.5px solid transparent',
+                    borderRadius: '12px',
+                    background: isActive ? 'var(--bg-card-hover)' : 'transparent',
+                    border: isActive ? `1.5px solid ${u.theme_color}` : '1.5px solid var(--border-color)',
                     cursor: 'pointer',
                     transition: 'var(--transition-fast)',
                   }}
@@ -117,7 +117,7 @@ export const Sidebar: React.FC = () => {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: '#000',
+                      color: '#fff',
                       fontSize: '11px',
                       fontWeight: 800,
                       marginBottom: '4px'
@@ -144,9 +144,9 @@ export const Sidebar: React.FC = () => {
         </span>
         <div 
           style={{ 
-            background: 'rgba(0,0,0,0.3)', 
+            background: 'var(--bg-card-hover)', 
             padding: '10px 14px', 
-            borderRadius: '8px', 
+            borderRadius: '16px', 
             border: '1px solid var(--border-color)',
             display: 'flex',
             flexDirection: 'column',
@@ -166,28 +166,28 @@ export const Sidebar: React.FC = () => {
           <button 
             onClick={() => advanceTime(1)}
             className="tab-btn"
-            style={{ fontSize: '11px', padding: '6px', justifyContent: 'center', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-color)' }}
+            style={{ fontSize: '11px', padding: '6px', justifyContent: 'center', background: 'var(--bg-card-hover)', border: '1px solid var(--border-color)', borderRadius: '9999px' }}
           >
             +1時間
           </button>
           <button 
             onClick={() => advanceTime(6)}
             className="tab-btn"
-            style={{ fontSize: '11px', padding: '6px', justifyContent: 'center', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-color)' }}
+            style={{ fontSize: '11px', padding: '6px', justifyContent: 'center', background: 'var(--bg-card-hover)', border: '1px solid var(--border-color)', borderRadius: '9999px' }}
           >
             +6時間
           </button>
           <button 
             onClick={() => advanceTime(12)}
             className="tab-btn"
-            style={{ fontSize: '11px', padding: '6px', justifyContent: 'center', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-color)' }}
+            style={{ fontSize: '11px', padding: '6px', justifyContent: 'center', background: 'var(--bg-card-hover)', border: '1px solid var(--border-color)', borderRadius: '9999px' }}
           >
             +12時間
           </button>
           <button 
             onClick={() => advanceTime(24)}
             className="tab-btn"
-            style={{ fontSize: '11px', padding: '6px', justifyContent: 'center', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-color)' }}
+            style={{ fontSize: '11px', padding: '6px', justifyContent: 'center', background: 'var(--bg-card-hover)', border: '1px solid var(--border-color)', borderRadius: '9999px' }}
           >
             +1日後
           </button>
@@ -196,10 +196,10 @@ export const Sidebar: React.FC = () => {
         <button 
           onClick={() => triggerCronCheck()}
           style={{
-            background: 'linear-gradient(135deg, rgba(0, 240, 255, 0.1) 0%, rgba(114, 9, 183, 0.15) 100%)',
-            border: '1px solid rgba(0, 240, 255, 0.2)',
+            background: 'var(--bg-card-hover)',
+            border: '1px solid var(--border-color)',
             padding: '8px',
-            borderRadius: '6px',
+            borderRadius: '9999px',
             cursor: 'pointer',
             fontSize: '12px',
             fontWeight: 700,
@@ -228,7 +228,7 @@ export const Sidebar: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <select 
             className="form-input" 
-            style={{ padding: '6px 10px', fontSize: '12px' }}
+            style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '9999px' }}
             value={selectedTeammateId}
             onChange={(e) => setSelectedTeammateId(e.target.value)}
           >
@@ -240,7 +240,7 @@ export const Sidebar: React.FC = () => {
 
           <select 
             className="form-input" 
-            style={{ padding: '6px 10px', fontSize: '12px' }}
+            style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '9999px' }}
             value={selectedTaskId}
             onChange={(e) => setSelectedTaskId(e.target.value)}
           >
@@ -253,7 +253,7 @@ export const Sidebar: React.FC = () => {
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
             <select 
               className="form-input" 
-              style={{ padding: '6px 10px', fontSize: '12px', width: '50%' }}
+              style={{ padding: '6px 10px', fontSize: '12px', width: '50%', borderRadius: '9999px' }}
               value={progressValue}
               onChange={(e) => setProgressValue(Number(e.target.value))}
             >
@@ -269,9 +269,9 @@ export const Sidebar: React.FC = () => {
                 flex: 1,
                 background: 'var(--accent-blue)',
                 border: 'none',
-                color: 'var(--bg-main)',
+                color: '#FFF',
                 padding: '8px',
-                borderRadius: '6px',
+                borderRadius: '9999px',
                 cursor: 'pointer',
                 fontSize: '12px',
                 fontWeight: 700,
@@ -304,9 +304,9 @@ export const Sidebar: React.FC = () => {
             gap: '8px', 
             overflowY: 'auto',
             maxHeight: '180px',
-            background: 'rgba(0,0,0,0.2)',
+            background: 'var(--bg-card-hover)',
             padding: '8px',
-            borderRadius: '8px',
+            borderRadius: '16px',
             border: '1px solid var(--border-color)'
           }}
         >
@@ -319,9 +319,9 @@ export const Sidebar: React.FC = () => {
               <div 
                 key={n.id}
                 style={{
-                  background: 'rgba(255, 51, 102, 0.08)',
-                  border: '1px solid rgba(255, 51, 102, 0.2)',
-                  borderRadius: '6px',
+                  background: 'rgba(230, 167, 154, 0.1)',
+                  border: '1px solid rgba(230, 167, 154, 0.25)',
+                  borderRadius: '12px',
                   padding: '8px',
                   display: 'flex',
                   flexDirection: 'column',
@@ -351,30 +351,30 @@ export const Sidebar: React.FC = () => {
         <div 
           style={{ 
             flex: 1,
-            background: '#07080c', 
+            background: 'var(--bg-card-hover)', 
             fontFamily: 'monospace', 
             fontSize: '10.5px', 
             padding: '10px', 
-            borderRadius: '8px', 
+            borderRadius: '16px', 
             border: '1px solid var(--border-color)',
             overflowY: 'auto',
             display: 'flex',
             flexDirection: 'column',
             gap: '6px',
-            color: '#39ff14' // Classic terminal green
+            color: 'var(--text-primary)'
           }}
         >
           {simEvents.map((evt) => {
-            let color = '#39ff14'; // green
+            let color = 'var(--text-primary)';
             if (evt.type === 'websocket') color = 'var(--accent-blue)';
             if (evt.type === 'warning') color = 'var(--accent-yellow)';
             if (evt.type === 'notification') color = 'var(--accent-red)';
-            if (evt.type === 'success') color = '#00ffaa';
+            if (evt.type === 'success') color = 'var(--accent-green)';
 
             return (
-              <div key={evt.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px' }}>
+              <div key={evt.id} style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '4px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>[{evt.timestamp}]</span>{' '}
-                <span style={{ color: '#fff', fontWeight: 700 }}>{evt.user}</span>:{' '}
+                <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{evt.user}</span>:{' '}
                 <span style={{ color }}>{evt.message}</span>
               </div>
             );
@@ -390,11 +390,11 @@ export const Sidebar: React.FC = () => {
           }
         }}
         style={{
-          background: 'rgba(255, 51, 102, 0.05)',
-          border: '1px solid rgba(255, 51, 102, 0.15)',
+          background: 'rgba(230, 167, 154, 0.08)',
+          border: '1px solid rgba(230, 167, 154, 0.2)',
           color: 'var(--accent-red)',
-          padding: '6px',
-          borderRadius: '6px',
+          padding: '8px',
+          borderRadius: '9999px',
           cursor: 'pointer',
           fontSize: '11px',
           display: 'flex',

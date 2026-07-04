@@ -11,7 +11,7 @@ interface CircularProgressBarProps {
 export const CircularProgressBar: React.FC<CircularProgressBarProps> = ({
   progress,
   size = 60,
-  strokeWidth = 5,
+  strokeWidth = 7, // Thicker default for cozy feel
   showText = true,
   color = 'var(--accent-blue)',
 }) => {
@@ -27,18 +27,20 @@ export const CircularProgressBar: React.FC<CircularProgressBarProps> = ({
         height: size, 
         display: 'inline-flex', 
         alignItems: 'center', 
-        justifyContent: 'center' 
+        justifyContent: 'center',
+        flexShrink: 0
       }}
     >
       <svg className="progress-ring" width={size} height={size}>
         {/* Track circle */}
         <circle
-          stroke="rgba(255, 255, 255, 0.05)"
+          stroke="var(--border-color)"
           fill="transparent"
           strokeWidth={strokeWidth}
           r={radius}
           cx={size / 2}
           cy={size / 2}
+          style={{ opacity: 0.7 }}
         />
         {/* Progress circle */}
         <circle
@@ -49,7 +51,7 @@ export const CircularProgressBar: React.FC<CircularProgressBarProps> = ({
           strokeDasharray={`${circumference} ${circumference}`}
           style={{ 
             strokeDashoffset,
-            transition: 'stroke-dashoffset 0.5s ease-in-out'
+            transition: 'stroke-dashoffset 0.5s ease-out'
           }}
           strokeLinecap="round"
           r={radius}
@@ -61,7 +63,7 @@ export const CircularProgressBar: React.FC<CircularProgressBarProps> = ({
         <span 
           style={{ 
             position: 'absolute', 
-            fontSize: `${size * 0.25}px`, 
+            fontSize: `${size * 0.26}px`, 
             fontWeight: 700,
             fontFamily: 'var(--font-display)',
             color: 'var(--text-primary)',

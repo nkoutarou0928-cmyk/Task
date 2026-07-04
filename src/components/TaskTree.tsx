@@ -96,13 +96,13 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, depth, onEdit, onAddSubtask }
     updateTaskProgress(task.id, newProgress);
   };
 
-  // Left 4px vertical indicator color:
+  // Left 4px vertical indicator color (Cozy Matte palette):
   const getUrgencyBorderColor = () => {
-    if (task.progress_rate >= 100) return '#9CA3AF'; // Completed tasks: grey
-    if (remainingHours <= 0) return '#FF4D4D'; // Expired: red
-    if (remainingHours < 24) return '#FF4D4D'; // Red
-    if (remainingHours < 72) return '#FFC107'; // Yellow
-    return '#9CA3AF'; // Grey
+    if (task.progress_rate >= 100) return '#B5C7A3'; // Sage Green
+    if (remainingHours <= 0) return '#E6A79A'; // Terracotta
+    if (remainingHours < 24) return '#E6A79A'; // Terracotta
+    if (remainingHours < 72) return '#EED09D'; // Mustard
+    return '#B5C7A3'; // Sage Green
   };
   const borderLeftColor = getUrgencyBorderColor();
 
@@ -110,7 +110,7 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, depth, onEdit, onAddSubtask }
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
       {/* Task Row */}
       <div 
-        className={`task-row-container rounded-2xl shadow-lg border border-gray-100 dark:border-zinc-800 bg-white dark:bg-[#1E1E1E] text-black dark:text-white transition-all duration-300 ${isYabai ? 'yabai-glow' : ''}`}
+        className={`task-row-container rounded-3xl shadow-sm border border-[#EAE3D8] dark:border-[#3E342F] bg-white dark:bg-[#2A231F] text-[#4A3E3D] dark:text-[#EAE3D8] transition-all duration-300 ${isYabai ? 'yabai-glow' : ''}`}
         onClick={() => {
           if (isParent) {
             setIsExpanded(!isExpanded);
@@ -122,7 +122,6 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, depth, onEdit, onAddSubtask }
           marginBottom: '12px',
           marginLeft: `${depth * 20}px`,
           cursor: isParent ? 'pointer' : 'default',
-          boxShadow: isYabai ? 'var(--glow-red)' : undefined,
           overflow: 'hidden'
         }}
       >
@@ -199,7 +198,7 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, depth, onEdit, onAddSubtask }
                   color: task.progress_rate === 100 ? 'var(--text-muted)' : undefined,
                   textDecoration: task.progress_rate === 100 ? 'line-through' : 'none'
                 }}
-                className="text-black dark:text-white"
+                className="text-[#4A3E3D] dark:text-[#EAE3D8]"
               >
                 {task.title}
               </span>
@@ -213,10 +212,10 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, depth, onEdit, onAddSubtask }
                     gap: '4px',
                     fontSize: '11px',
                     color: 'var(--accent-blue)',
-                    background: 'rgba(0, 240, 255, 0.08)',
+                    background: 'rgba(139, 166, 169, 0.08)',
                     padding: '2px 6px',
-                    borderRadius: '4px',
-                    border: '1px solid rgba(0, 240, 255, 0.2)'
+                    borderRadius: '9999px',
+                    border: '1px solid rgba(139, 166, 169, 0.2)'
                   }}
                 >
                   <Users size={10} />
@@ -233,12 +232,11 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, depth, onEdit, onAddSubtask }
                     gap: '4px',
                     fontSize: '11px',
                     color: 'var(--accent-red)',
-                    fontWeight: 700,
-                    animation: 'pulse 1.5s infinite'
+                    fontWeight: 700
                   }}
                 >
                   <AlertTriangle size={12} />
-                  やばい！
+                  期限が迫っています
                 </span>
               )}
             </div>
@@ -281,7 +279,7 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, depth, onEdit, onAddSubtask }
             {/* Priority Score badge */}
             {task.progress_rate < 100 && (
               <div className="priority-score" title="流動的優先度スコア P">
-                AI: {priorityScore}
+                優先度: {priorityScore}
               </div>
             )}
 
@@ -300,7 +298,7 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, depth, onEdit, onAddSubtask }
               <CircularProgressBar 
                 progress={task.progress_rate} 
                 size={isParent ? 52 : 42} 
-                strokeWidth={isParent ? 5 : 4.5}
+                strokeWidth={isParent ? 7 : 6}
                 color={urgencyColor}
               />
             </div>
@@ -316,10 +314,10 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, depth, onEdit, onAddSubtask }
                   }}
                   className="action-btn"
                   style={{
-                    background: 'rgba(255, 255, 255, 0.05)',
+                    background: 'rgba(138, 126, 114, 0.05)',
                     border: '1px solid var(--border-color)',
                     color: 'var(--text-secondary)',
-                    borderRadius: '6px',
+                    borderRadius: '9999px',
                     padding: '6px',
                     cursor: 'pointer',
                     display: 'flex',
@@ -340,10 +338,10 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, depth, onEdit, onAddSubtask }
                 }}
                 className="action-btn"
                 style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
+                  background: 'rgba(138, 126, 114, 0.05)',
                   border: '1px solid var(--border-color)',
                   color: 'var(--text-secondary)',
-                  borderRadius: '6px',
+                  borderRadius: '9999px',
                   padding: '6px',
                   cursor: 'pointer',
                   display: 'flex',
@@ -365,10 +363,10 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, depth, onEdit, onAddSubtask }
                 }}
                 className="action-btn-danger"
                 style={{
-                  background: 'rgba(255, 51, 102, 0.08)',
-                  border: '1px solid rgba(255, 51, 102, 0.2)',
+                  background: 'rgba(230, 167, 154, 0.08)',
+                  border: '1px solid rgba(230, 167, 154, 0.2)',
                   color: 'var(--accent-red)',
-                  borderRadius: '6px',
+                  borderRadius: '9999px',
                   padding: '6px',
                   cursor: 'pointer',
                   display: 'flex',
@@ -391,7 +389,7 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, depth, onEdit, onAddSubtask }
             marginLeft: `${depth * 20 + 40}px`,
             background: 'var(--bg-card-hover)',
             padding: '12px 16px',
-            borderRadius: '8px',
+            borderRadius: '16px',
             marginBottom: '8px',
             display: 'flex',
             alignItems: 'center',
@@ -414,11 +412,11 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, depth, onEdit, onAddSubtask }
           <button 
             onClick={() => setShowProgressSlider(false)}
             style={{
-              padding: '2px 8px',
+              padding: '4px 12px',
               fontSize: '11px',
-              background: 'rgba(255,255,255,0.08)',
+              background: 'rgba(138, 126, 114, 0.08)',
               border: 'none',
-              borderRadius: '4px',
+              borderRadius: '9999px',
               cursor: 'pointer'
             }}
           >
@@ -434,7 +432,7 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, depth, onEdit, onAddSubtask }
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
             style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', width: '100%' }}
           >
             {children.map((child) => (

@@ -106,34 +106,34 @@ export const DashboardView: React.FC = () => {
     setTasksOrder(newTasksOrder);
   };
 
-  // Get deadline badge styling with dynamic colors
+  // Get deadline badge styling with dynamic colors (Cozy palette)
   const getDeadlineBadge = (progress: number, remainingHours: number) => {
     let text = '';
     let color = '';
 
     if (progress >= 100) {
       text = '完了';
-      color = '#00f5d4';
+      color = '#B5C7A3'; // Sage Green
     } else if (remainingHours <= 0) {
       text = '期限切れ';
-      color = '#FF4D4D';
+      color = '#E6A79A'; // Terracotta
     } else if (remainingHours < 24) {
       text = `残り ${Math.round(remainingHours)}時間`;
-      color = '#FF4D4D';
+      color = '#E6A79A'; // Terracotta
     } else if (remainingHours < 72) {
       text = `残り ${Math.round(remainingHours / 24)}日`;
-      color = '#FFC107';
+      color = '#EED09D'; // Mustard
     } else {
       text = `残り ${Math.round(remainingHours / 24)}日`;
-      color = '#E0E0E0';
+      color = '#8BA6A9'; // Soft Slate Blue
     }
 
     return {
       text,
       style: {
-        backgroundColor: `${color}1a`, // 10% opacity
+        backgroundColor: `${color}22`, // 13% opacity
         color: color,
-        border: `1px solid ${color}4d`, // 30% opacity
+        border: `1px solid ${color}66`, // 40% opacity
       },
       color
     };
@@ -161,9 +161,9 @@ export const DashboardView: React.FC = () => {
           display: 'flex', 
           justifyContent: 'space-between', 
           alignItems: 'center', 
-          background: 'rgba(255, 255, 255, 0.03)',
+          background: 'rgba(138, 126, 114, 0.03)',
           padding: '12px 16px',
-          borderRadius: '10px',
+          borderRadius: '16px',
           border: '1px solid var(--border-color)',
           flexWrap: 'wrap',
           gap: '12px'
@@ -207,7 +207,7 @@ export const DashboardView: React.FC = () => {
                     color: 'var(--text-secondary)',
                     background: 'var(--bg-card)',
                     border: '1px solid var(--border-color)',
-                    borderRadius: '12px' 
+                    borderRadius: '24px' 
                   }}
                 >
                   未完了のタスクはありません！素晴らしい進捗です 🎉
@@ -226,7 +226,7 @@ export const DashboardView: React.FC = () => {
                       index={index}
                       isDragDisabled={sortMode === 'ai'}
                     >
-                      {(provided, snapshot) => (
+                      {(provided) => (
                         <div
                           ref={provided.innerRef}
                           {...provided.draggableProps}
@@ -234,7 +234,7 @@ export const DashboardView: React.FC = () => {
                             width: '100%',
                             position: 'relative',
                             overflow: 'hidden',
-                            borderRadius: '12px',
+                            borderRadius: '24px',
                             marginBottom: '12px',
                             ...provided.draggableProps.style,
                           }}
@@ -250,12 +250,12 @@ export const DashboardView: React.FC = () => {
                             justifyContent: 'space-between',
                             alignItems: 'center',
                             padding: '0 24px',
-                            borderRadius: '12px',
-                            background: 'linear-gradient(90deg, rgba(0,245,212,0.2) 0%, rgba(141,78,221,0.2) 100%)',
+                            borderRadius: '24px',
+                            background: 'linear-gradient(90deg, rgba(181,199,163,0.15) 0%, rgba(196,166,184,0.15) 100%)',
                             pointerEvents: 'none'
                           }}>
-                            <span style={{ color: '#00f5d4', fontWeight: 800, fontSize: '13px' }}>👉 右スワイプで完了</span>
-                            <span style={{ color: '#9d4edd', fontWeight: 800, fontSize: '13px' }}>優先度を下げる 左スワイプ 👈</span>
+                            <span style={{ color: 'var(--accent-green)', fontWeight: 800, fontSize: '13px' }}>👉 右スワイプで完了</span>
+                            <span style={{ color: 'var(--accent-purple)', fontWeight: 800, fontSize: '13px' }}>優先度を下げる 左スワイプ 👈</span>
                           </div>
 
                           <motion.div
@@ -263,16 +263,11 @@ export const DashboardView: React.FC = () => {
                             dragConstraints={{ left: 0, right: 0 }}
                             dragElastic={0.6}
                             onDragEnd={(_, info) => handleSwipeEnd(info, task)}
-                            className={`task-card-outer rounded-2xl shadow-lg border border-gray-100 dark:border-zinc-800 bg-white dark:bg-[#1E1E1E] text-black dark:text-white transition-all duration-300 ${isYabai ? 'yabai-glow' : ''}`}
+                            className={`task-card-outer rounded-3xl shadow-sm border border-[#EAE3D8] dark:border-[#3E342F] bg-white dark:bg-[#2A231F] text-[#4A3E3D] dark:text-[#EAE3D8] transition-all duration-300 ${isYabai ? 'yabai-glow' : ''}`}
                             style={{
                               display: 'flex',
                               alignItems: 'stretch',
                               padding: 0,
-                              boxShadow: isYabai 
-                                ? 'var(--glow-red)' 
-                                : snapshot.isDragging 
-                                  ? 'var(--glow-blue)' 
-                                  : 'none',
                               userSelect: 'none',
                               touchAction: 'none',
                               overflow: 'hidden'
@@ -283,11 +278,11 @@ export const DashboardView: React.FC = () => {
                               style={{
                                 width: '4px',
                                 backgroundColor: (() => {
-                                  if (task.progress_rate >= 100) return '#9CA3AF'; // Completed tasks: grey
-                                  if (remainingHours <= 0) return '#FF4D4D'; // Expired: red
-                                  if (remainingHours < 24) return '#FF4D4D'; // Red
-                                  if (remainingHours < 72) return '#FFC107'; // Yellow
-                                  return '#9CA3AF'; // Grey
+                                  if (task.progress_rate >= 100) return '#B5C7A3'; // Sage Green
+                                  if (remainingHours <= 0) return '#E6A79A'; // Terracotta
+                                  if (remainingHours < 24) return '#E6A79A'; // Terracotta
+                                  if (remainingHours < 72) return '#EED09D'; // Mustard
+                                  return '#B5C7A3'; // Sage Green
                                 })(),
                                 flexShrink: 0,
                                 alignSelf: 'stretch'
@@ -341,7 +336,7 @@ export const DashboardView: React.FC = () => {
                                   <CheckCircle2 
                                     size={22} 
                                     style={{
-                                      color: 'rgba(128,128,128,0.25)',
+                                      color: 'rgba(138,126,114,0.25)',
                                     }}
                                   />
                                 </button>
@@ -350,7 +345,7 @@ export const DashboardView: React.FC = () => {
                               {/* Middle: Info */}
                               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <span style={{ fontWeight: 700, fontSize: '16px' }} className="text-black dark:text-white">{task.title}</span>
+                                  <span style={{ fontWeight: 700, fontSize: '16px' }} className="text-[#4A3E3D] dark:text-[#EAE3D8]">{task.title}</span>
                                   {isYabai && (
                                     <span 
                                       style={{ 
@@ -363,7 +358,7 @@ export const DashboardView: React.FC = () => {
                                       }}
                                     >
                                       <AlertTriangle size={12} />
-                                      やばさ検知
+                                      期限が迫っています
                                     </span>
                                   )}
                                 </div>
@@ -402,7 +397,7 @@ export const DashboardView: React.FC = () => {
                                   style={{ cursor: 'help', position: 'relative' }}
                                   title={`AI優先度スコア: ${score}\n式: P = ${formula}`}
                                 >
-                                  <span>AI優先度: {score}</span>
+                                  <span>優先度: {score}</span>
                                   <HelpCircle size={12} style={{ opacity: 0.6 }} />
                                 </div>
 
@@ -413,7 +408,7 @@ export const DashboardView: React.FC = () => {
                                 <CircularProgressBar 
                                   progress={task.progress_rate} 
                                   size={hasChildren ? 52 : 44} 
-                                  strokeWidth={hasChildren ? 5 : 4} 
+                                  strokeWidth={hasChildren ? 7 : 6} 
                                   color={badge.color}
                                 />
                               </div>
