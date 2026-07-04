@@ -53,7 +53,7 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, depth, onEdit, onAddSubtask }
   const remainingWorkHours = remainingWorkMinutes / 60;
   
   const denominator = remainingHours <= 0 ? 0.05 : Math.max(0.05, remainingHours);
-  const priorityScore = task.progress_rate >= 100 ? 0 : Math.round((task.estimated_minutes * (100 - task.progress_rate)) / denominator / 100);
+  const priorityScore = task.progress_rate >= 100 ? 0 : Math.round((task.estimated_minutes * (100 - task.progress_rate)) / denominator / 1000);
 
   // "Yabai" prediction condition
   // Remaining Time < Remaining Work * 1.5 AND task is not completed
