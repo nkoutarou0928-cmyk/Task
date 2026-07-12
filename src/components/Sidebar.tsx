@@ -35,7 +35,7 @@ export const Sidebar: React.FC = () => {
   const teammates = users.filter((u) => u.id !== currentUser.id);
 
   // Get active team tasks for teammate simulation
-  const teamTasks = tasks.filter((t) => t.team_id !== null && tasks.filter(child => child.parent_id === t.id).length === 0); // Leaf team tasks
+  const teamTasks = tasks.filter((t) => t.team_id !== null && tasks.filter(child => child.parentId === t.id).length === 0); // Leaf team tasks
 
   const handleSimulateAction = () => {
     if (!selectedTeammateId || !selectedTaskId) {

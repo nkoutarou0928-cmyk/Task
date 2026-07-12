@@ -57,7 +57,7 @@ async function rebuildAllParentProgress() {
   const allTasks = await prisma.task.findMany();
   // Find all parentIds
   const parentIds = Array.from(
-    new Set(allTasks.map((t) => t.parent_id).filter((id): id is string => id !== null))
+    new Set(allTasks.map((t) => t.parentId).filter((id): id is string => id !== null))
   );
 
   let changed = true;
@@ -67,14 +67,14 @@ async function rebuildAllParentProgress() {
     changed = false;
     const tasksState = await prisma.task.findMany();
     for (const parentId of parentIds) {
-      const siblings = tasksState.filter((t) => t.parent_id === parentId);
+      const siblings = tasksState.filter((t) => t.parentId === parentId);
       if (siblings.length > 0) {
-        const avg = Math.round(siblings.reduce((sum, s) => sum + s.progress_rate, 0) / siblings.length);
+        const avg = Math.round(siblings.reduce((sum, s) => sum + s.progressRate, 0) / siblings.length);
         const parent = tasksState.find((t) => t.id === parentId);
-        if (parent && parent.progress_rate !== avg) {
+        if (parent && parent.progressRate !== avg) {
           await prisma.task.update({
             where: { id: parentId },
-            data: { progress_rate: avg },
+            data: { progressRate: avg },
           });
           changed = true;
         }
@@ -123,14 +123,18 @@ app.get("/api/v1/tasks", async (req, res) => {
     const remainingHours = remainingMs / (1000 * 60 * 60);
     const denominator = remainingHours <= 0 ? 0.05 : Math.max(0.05, remainingHours);
 
-    const remainingWorkMinutes = t.estimated_minutes * ((100 - t.progress_rate) / 100);
+    const remainingWorkMinutes = t.estimatedMinutes * ((100 - t.progressRate) / 100);
     const remainingWorkHours = remainingWorkMinutes / 60;
 
-    const priorityScore = t.progress_rate >= 100 ? 0 : Math.round(remainingWorkMinutes / denominator / 10);
-    const isYabai = t.progress_rate < 100 && remainingHours < (remainingWorkHours * 1.5);
+    const priorityScore = t.progressRate >= 100 ? 0 : Math.round(remainingWorkMinutes / denominator / 10);
+    const isYabai = t.progressRate < 100 && remainingHours < (remainingWorkHours * 1.5);
 
     return {
       ...t,
+      priorityScore,
+      isYabai,
+      remainingHours,
+      // Compatibility with legacy frontend templates
       priority_score: priorityScore,
       is_yabai: isYabai,
       remaining_hours: remainingHours,
@@ -143,7 +147,7 @@ app.get("/api/v1/tasks", async (req, res) => {
 // Create task
 app.post("/api/v1/tasks", authenticateJWT, async (req: any, res) => {
   try {
-    const { title, estimated_minutes, deadline, team_id, assigned_user_id, parent_id } = req.body;
+    const { title, estimated_minutes, estimatedMinutes, deadline, team_id, assigned_user_id, parent_id, parentId, groupName } = req.body;
 
     if (!title || !title.trim()) {
       return res.status(400).json({ error: "タスクタイトルは必須です。" });
@@ -153,6 +157,9 @@ app.post("/api/v1/tasks", authenticateJWT, async (req: any, res) => {
     if (isNaN(parsedDeadline.getTime())) {
       return res.status(400).json({ error: "締切日時の形式が無効です。" });
     }
+
+    const minutes = estimatedMinutes !== undefined ? estimatedMinutes : estimated_minutes;
+    const pId = parentId !== undefined ? parentId : parent_id;
 
     // Authorization check: if task belongs to a team, verify user is in that team
     if (team_id) {
@@ -167,12 +174,13 @@ app.post("/api/v1/tasks", authenticateJWT, async (req: any, res) => {
     const task = await prisma.task.create({
       data: {
         title,
-        estimated_minutes: Number(estimated_minutes) || 0,
+        estimatedMinutes: Number(minutes) || 0,
         deadline: parsedDeadline,
         team_id: team_id || null,
         assigned_user_id: assigned_user_id || null,
-        parent_id: parent_id || null,
-        progress_rate: 0,
+        parentId: pId || null,
+        progressRate: 0,
+        groupName: groupName || "大学の講義",
       },
     });
 
@@ -195,7 +203,7 @@ app.post("/api/v1/tasks", authenticateJWT, async (req: any, res) => {
 // Update task progress
 app.post("/api/v1/tasks/:id/progress", authenticateJWT, async (req: any, res) => {
   const { id } = req.params;
-  const { progress_rate } = req.body;
+  const { progress_rate, progressRate } = req.body;
 
   const task = await prisma.task.findUnique({ where: { id } });
   if (!task) {
@@ -212,10 +220,12 @@ app.post("/api/v1/tasks/:id/progress", authenticateJWT, async (req: any, res) =>
     }
   }
 
+  const rate = progressRate !== undefined ? progressRate : progress_rate;
+
   // Update target task progress
   const updatedTask = await prisma.task.update({
     where: { id },
-    data: { progress_rate: Number(progress_rate) },
+    data: { progressRate: Number(rate) },
   });
 
   // Run parent task updates bottom-up
@@ -226,7 +236,7 @@ app.post("/api/v1/tasks/:id/progress", authenticateJWT, async (req: any, res) =>
     type: "TASK_UPDATED",
     taskId: id,
     updater: req.user.name,
-    message: `${req.user.name}が『${task.title}』の進捗を ${progress_rate}% に更新しました。`,
+    message: `${req.user.name}が『${task.title}』の進捗を ${rate}% に更新しました。`,
   });
 
   res.json(updatedTask);
@@ -252,7 +262,7 @@ app.post("/api/v1/tasks/:id/complete", authenticateJWT, async (req: any, res) =>
 
   const updatedTask = await prisma.task.update({
     where: { id },
-    data: { progress_rate: 100 },
+    data: { progressRate: 100 },
   });
 
   await rebuildAllParentProgress();
@@ -271,7 +281,7 @@ app.post("/api/v1/tasks/:id/complete", authenticateJWT, async (req: any, res) =>
 app.put("/api/v1/tasks/:id", authenticateJWT, async (req: any, res) => {
   try {
     const { id } = req.params;
-    const { title, estimated_minutes, deadline, assigned_user_id, team_id } = req.body;
+    const { title, estimated_minutes, estimatedMinutes, deadline, assigned_user_id, team_id, groupName } = req.body;
 
     const task = await prisma.task.findUnique({ where: { id } });
     if (!task) {
@@ -287,14 +297,17 @@ app.put("/api/v1/tasks/:id", authenticateJWT, async (req: any, res) => {
       return res.status(400).json({ error: "締切日時の形式が無効です。" });
     }
 
+    const minutes = estimatedMinutes !== undefined ? estimatedMinutes : estimated_minutes;
+
     const updatedTask = await prisma.task.update({
       where: { id },
       data: {
         title,
-        estimated_minutes: Number(estimated_minutes) || 0,
+        estimatedMinutes: Number(minutes) || 0,
         deadline: parsedDeadline,
         assigned_user_id: assigned_user_id || null,
         team_id: team_id || null,
+        groupName: groupName || task.groupName,
       },
     });
 
@@ -421,46 +434,46 @@ app.post("/api/v1/simulator/reset", async (req, res) => {
       { team_id: teamCircle.id, user_id: bob.id },
     ],
   });
-  
+
   const baseTime = new Date();
   const oneDay = 24 * 60 * 60 * 1000;
-  
+
   const seminarParent = await prisma.task.create({
-    data: { id: "task-seminar-parent", title: "ゼミの共同発表資料作成", estimated_minutes: 330, progress_rate: 40, deadline: new Date(baseTime.getTime() + 2 * oneDay), team_id: teamSeminar.id },
+    data: { id: "task-seminar-parent", title: "ゼミの共同発表資料作成", estimatedMinutes: 330, progressRate: 40, deadline: new Date(baseTime.getTime() + 2 * oneDay), team_id: teamSeminar.id, groupName: "大学の講義 🌿" },
   });
   await prisma.task.create({
-    data: { id: "task-seminar-child-docs", title: "文献調査・資料集め", parent_id: seminarParent.id, estimated_minutes: 120, progress_rate: 100, deadline: new Date(baseTime.getTime() + 1 * oneDay), team_id: teamSeminar.id, assigned_user_id: alice.id },
+    data: { id: "task-seminar-child-docs", title: "文献調査・資料集め", parentId: seminarParent.id, estimatedMinutes: 120, progressRate: 100, deadline: new Date(baseTime.getTime() + 1 * oneDay), team_id: teamSeminar.id, assigned_user_id: alice.id, groupName: "大学の講義 🌿" },
   });
   await prisma.task.create({
-    data: { id: "task-seminar-child-resume", title: "レジュメの印刷と製本", parent_id: seminarParent.id, estimated_minutes: 30, progress_rate: 0, deadline: new Date(baseTime.getTime() + 1.8 * oneDay), team_id: teamSeminar.id, assigned_user_id: bob.id },
+    data: { id: "task-seminar-child-resume", title: "レジュメの印刷と製本", parentId: seminarParent.id, estimatedMinutes: 30, progressRate: 0, deadline: new Date(baseTime.getTime() + 1.8 * oneDay), team_id: teamSeminar.id, assigned_user_id: bob.id, groupName: "大学の講義 🌿" },
   });
   const seminarChildSlide = await prisma.task.create({
-    data: { id: "task-seminar-child-slide", title: "スライド資料の執筆", parent_id: seminarParent.id, estimated_minutes: 180, progress_rate: 20, deadline: new Date(baseTime.getTime() + 2 * oneDay), team_id: teamSeminar.id },
+    data: { id: "task-seminar-child-slide", title: "スライド資料の執筆", parentId: seminarParent.id, estimatedMinutes: 180, progressRate: 20, deadline: new Date(baseTime.getTime() + 2 * oneDay), team_id: teamSeminar.id, groupName: "大学の講義 🌿" },
   });
   await prisma.task.create({
-    data: { id: "task-seminar-sub-intro", title: "前半部分（イントロ・課題定義）", parent_id: seminarChildSlide.id, estimated_minutes: 90, progress_rate: 40, deadline: new Date(baseTime.getTime() + 1.5 * oneDay), team_id: teamSeminar.id, assigned_user_id: charlie.id },
+    data: { id: "task-seminar-sub-intro", title: "前半部分（イントロ・課題定義）", parentId: seminarChildSlide.id, estimatedMinutes: 90, progressRate: 40, deadline: new Date(baseTime.getTime() + 1.5 * oneDay), team_id: teamSeminar.id, assigned_user_id: charlie.id, groupName: "大学の講義 🌿" },
   });
   await prisma.task.create({
-    data: { id: "task-seminar-sub-body", title: "後半部分（提案手法・評価）", parent_id: seminarChildSlide.id, estimated_minutes: 90, progress_rate: 0, deadline: new Date(baseTime.getTime() + 2 * oneDay), team_id: teamSeminar.id, assigned_user_id: charlie.id },
+    data: { id: "task-seminar-sub-body", title: "後半部分（提案手法・評価）", parentId: seminarChildSlide.id, estimatedMinutes: 90, progressRate: 0, deadline: new Date(baseTime.getTime() + 2 * oneDay), team_id: teamSeminar.id, assigned_user_id: charlie.id, groupName: "大学の講義 🌿" },
   });
 
   const jobParent = await prisma.task.create({
-    data: { id: "task-job-parent", title: "就活エントリーシート提出 (大手IT企業)", estimated_minutes: 150, progress_rate: 20, deadline: new Date(baseTime.getTime() + 0.8 * oneDay), assigned_user_id: alice.id },
+    data: { id: "task-job-parent", title: "就活エントリーシート提出 (大手IT企業)", estimatedMinutes: 150, progressRate: 20, deadline: new Date(baseTime.getTime() + 0.8 * oneDay), assigned_user_id: alice.id, groupName: "就職活動 💼" },
   });
   await prisma.task.create({
-    data: { id: "task-job-draft", title: "自己PRの添削依頼", parent_id: jobParent.id, estimated_minutes: 60, progress_rate: 50, deadline: new Date(baseTime.getTime() + 0.4 * oneDay), assigned_user_id: alice.id },
+    data: { id: "task-job-draft", title: "自己PRの添削依頼", parentId: jobParent.id, estimatedMinutes: 60, progressRate: 50, deadline: new Date(baseTime.getTime() + 0.4 * oneDay), assigned_user_id: alice.id, groupName: "就職活動 💼" },
   });
   await prisma.task.create({
-    data: { id: "task-job-reason", title: "志望動機の推敲", parent_id: jobParent.id, estimated_minutes: 90, progress_rate: 0, deadline: new Date(baseTime.getTime() + 0.8 * oneDay), assigned_user_id: alice.id },
+    data: { id: "task-job-reason", title: "志望動機の推敲", parentId: jobParent.id, estimatedMinutes: 90, progressRate: 0, deadline: new Date(baseTime.getTime() + 0.8 * oneDay), assigned_user_id: alice.id, groupName: "就職活動 💼" },
   });
   const circleParent = await prisma.task.create({
-    data: { id: "task-circle-parent", title: "夏合宿の案内チラシ作成", estimated_minutes: 180, progress_rate: 60, deadline: new Date(baseTime.getTime() + 5 * oneDay), team_id: teamCircle.id },
+    data: { id: "task-circle-parent", title: "夏合宿の案内チラシ作成", estimatedMinutes: 180, progressRate: 60, deadline: new Date(baseTime.getTime() + 5 * oneDay), team_id: teamCircle.id, groupName: "サークル活動 📣" },
   });
   await prisma.task.create({
-    data: { id: "task-circle-design", title: "デザイン原案作成", parent_id: circleParent.id, estimated_minutes: 120, progress_rate: 90, deadline: new Date(baseTime.getTime() + 3 * oneDay), team_id: teamCircle.id, assigned_user_id: bob.id },
+    data: { id: "task-circle-design", title: "デザイン原案作成", parentId: circleParent.id, estimatedMinutes: 120, progressRate: 90, deadline: new Date(baseTime.getTime() + 3 * oneDay), team_id: teamCircle.id, assigned_user_id: bob.id, groupName: "サークル活動 📣" },
   });
   await prisma.task.create({
-    data: { id: "task-circle-print", title: "部室での配布と掲示", parent_id: circleParent.id, estimated_minutes: 60, progress_rate: 0, deadline: new Date(baseTime.getTime() + 5 * oneDay), team_id: teamCircle.id, assigned_user_id: alice.id },
+    data: { id: "task-circle-print", title: "部室での配布と掲示", parentId: circleParent.id, estimatedMinutes: 60, progressRate: 0, deadline: new Date(baseTime.getTime() + 5 * oneDay), team_id: teamCircle.id, assigned_user_id: alice.id, groupName: "サークル活動 📣" },
   });
 
   broadcast({
@@ -478,13 +491,13 @@ async function runPredictionJob(currentTime: Date) {
 
   for (const task of currentTasks) {
     // Only check leaf tasks
-    const hasChildren = currentTasks.some((t) => t.parent_id === task.id);
-    if (hasChildren || task.progress_rate >= 100) continue;
+    const hasChildren = currentTasks.some((t) => t.parentId === task.id);
+    if (hasChildren || task.progressRate >= 100) continue;
 
     const diffMs = new Date(task.deadline).getTime() - currentTime.getTime();
     const remainingHours = diffMs / (1000 * 60 * 60);
 
-    const remainingMinutes = task.estimated_minutes * ((100 - task.progress_rate) / 100);
+    const remainingMinutes = task.estimatedMinutes * ((100 - task.progressRate) / 100);
     const remainingWorkHours = remainingMinutes / 60;
 
     // Remaining Time < Remaining Work * 1.5

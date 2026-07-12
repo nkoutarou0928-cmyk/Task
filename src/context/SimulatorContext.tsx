@@ -254,7 +254,7 @@ export const SimulatorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${tokenRef.current}`
         },
-        body: JSON.stringify({ progress_rate: progress })
+        body: JSON.stringify({ progressRate: progress })
       });
 
       if (!res.ok) {
@@ -414,7 +414,7 @@ export const SimulatorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${teammateToken}`
         },
-        body: JSON.stringify({ progress_rate: newProgress })
+        body: JSON.stringify({ progressRate: newProgress })
       });
 
       if (!res.ok) {

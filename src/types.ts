@@ -18,13 +18,17 @@ export interface TeamMember {
 export interface Task {
   id: string;
   title: string;
-  parent_id: string | null;
-  estimated_minutes: number;
-  progress_rate: number; // 0 to 100
+  parentId: string | null;
+  estimatedMinutes: number;
+  progressRate: number; // 0 to 100
   deadline: string; // ISO string
+  groupName: string; // Automatically classified group
   team_id: string | null;
   assigned_user_id: string | null;
   manual_order?: number; // Override order index for manual sorting
+  priorityScore?: number;
+  isYabai?: boolean;
+  remainingHours?: number;
 }
 
 // Log of events representing backend/realtime events

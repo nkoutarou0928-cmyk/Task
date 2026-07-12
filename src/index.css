@@ -33,6 +33,25 @@
   --transition-fast: all 0.15s ease-out;
 }
 
+.dark {
+  --bg-main: #121212;
+  --bg-panel: rgba(30, 30, 30, 0.85);
+  --bg-panel-solid: #1E1E1E;
+  --bg-card: #1E1E1E;
+  --bg-card-hover: #2A2A2E;
+  --border-color: #2D2D32;
+  
+  --text-primary: #FFFFFF;
+  --text-secondary: #C7B7A3;
+  --text-muted: #8A7E72;
+
+  --accent-blue: #A2C4C9;
+  --accent-red: #F0B1A8;
+  --accent-yellow: #F6E2C3;
+  --accent-green: #C5D7B3;
+  --accent-purple: #D4B6C8;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;

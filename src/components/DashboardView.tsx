@@ -12,10 +12,15 @@ import {
   AlertTriangle,
   HelpCircle,
   GripVertical,
-  CheckCircle2
+  CheckCircle2,
+  Trash2
 } from 'lucide-react';
 
-export const DashboardView: React.FC = () => {
+interface DashboardViewProps {
+  selectedGroup: string;
+}
+
+export const DashboardView: React.FC<DashboardViewProps> = ({ selectedGroup }) => {
   const { 
     tasks, 
     users, 
@@ -23,14 +28,13 @@ export const DashboardView: React.FC = () => {
     sortMode, 
     setSortMode, 
     setTasksOrder,
-    updateTaskProgress
+    updateTaskProgress,
+    deleteTask
   } = useSimulator();
 
-  // Filter tasks to show in the Dashboard: 
-  // - Show only incomplete tasks or tasks with progress < 100
-  // - Show all tasks so user can see what happens when they complete it
-  const activeTasks = tasks.filter(t => t.progress_rate < 100);
-  const completedTasks = tasks.filter(t => t.progress_rate === 100);
+  // Filter tasks based on completed rate and group
+  const activeTasks = tasks.filter(t => t.progressRate < 100 && t.groupName === selectedGroup);
+  const completedTasks = tasks.filter(t => t.progressRate === 100 && t.groupName === selectedGroup);
 
   // Helper to calculate Priority Score P
   const getPriorityInfo = (task: Task) => {
@@ -39,10 +43,10 @@ export const DashboardView: React.FC = () => {
     const remainingHours = remainingMs / (1000 * 60 * 60);
     const denominator = remainingHours <= 0 ? 0.05 : Math.max(0.05, remainingHours);
     
-    const remainingWorkMinutes = task.estimated_minutes * ((100 - task.progress_rate) / 100);
+    const remainingWorkMinutes = task.estimatedMinutes * ((100 - task.progressRate) / 100);
     const remainingWorkHours = remainingWorkMinutes / 60;
     
-    // P = remaining_work_minutes / remaining_hours / 100 (scaled for display)
+    // P = remaining_work_minutes / remaining_hours / 10 (scaled for display)
     const score = Math.round(remainingWorkMinutes / denominator / 10);
     
     const isYabai = remainingHours < (remainingWorkHours * 1.5);
@@ -52,7 +56,7 @@ export const DashboardView: React.FC = () => {
       remainingHours,
       remainingWorkMinutes,
       isYabai,
-      formula: `(${task.estimated_minutes}分 × ${100 - task.progress_rate}%) / ${remainingHours <= 0 ? '0.05' : Math.max(0.05, remainingHours).toFixed(1)}時間`
+      formula: `(${task.estimatedMinutes}分 × ${100 - task.progressRate}%) / ${remainingHours <= 0 ? '0.05' : Math.max(0.05, remainingHours).toFixed(1)}時間`
     };
   };
 
@@ -65,8 +69,6 @@ export const DashboardView: React.FC = () => {
         return scoreB - scoreA; // Descending order of priority
       });
     }
-    // In manual mode, we respect the current array order from tasks state
-    // but filter to only show active ones.
     return activeTasks;
   };
 
@@ -76,17 +78,16 @@ export const DashboardView: React.FC = () => {
   const onDragEnd = (result: DropResult) => {
     if (!result.destination) return;
 
-    // Switch to manual mode immediately on drag
     setSortMode('manual');
 
     const items = Array.from(sortedActiveTasks);
     const [reorderedItem] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, reorderedItem);
 
-    // Merge reordered active tasks back with completed tasks and non-active ones
+    // Rebuild full tasks array order
     const newTasksOrder: Task[] = [];
     
-    // Map items order
+    // Add active items in new order
     items.forEach((item) => {
       newTasksOrder.push(item);
     });
@@ -96,9 +97,9 @@ export const DashboardView: React.FC = () => {
       newTasksOrder.push(item);
     });
 
-    // Handle any tasks that were somehow missed (e.g. parent tasks that might not be in the list)
+    // Add any other tasks that belong to other groups to preserve order
     tasks.forEach((t) => {
-      if (!newTasksOrder.some(x => x.id === t.id)) {
+      if (!newTasksOrder.some(added => added.id === t.id)) {
         newTasksOrder.push(t);
       }
     });
@@ -106,7 +107,7 @@ export const DashboardView: React.FC = () => {
     setTasksOrder(newTasksOrder);
   };
 
-  // Get deadline badge styling with dynamic colors (Cozy palette)
+  // Get deadline badge styling with dynamic colors
   const getDeadlineBadge = (progress: number, remainingHours: number) => {
     let text = '';
     let color = '';
@@ -116,24 +117,24 @@ export const DashboardView: React.FC = () => {
       color = '#B5C7A3'; // Sage Green
     } else if (remainingHours <= 0) {
       text = '期限切れ';
-      color = '#E6A79A'; // Terracotta
+      color = '#E6A79A'; // Terracotta Red
     } else if (remainingHours < 24) {
       text = `残り ${Math.round(remainingHours)}時間`;
-      color = '#E6A79A'; // Terracotta
+      color = '#E6A79A'; // Terracotta Red
     } else if (remainingHours < 72) {
       text = `残り ${Math.round(remainingHours / 24)}日`;
-      color = '#EED09D'; // Mustard
+      color = '#EED09D'; // Mustard Yellow
     } else {
       text = `残り ${Math.round(remainingHours / 24)}日`;
-      color = '#8BA6A9'; // Soft Slate Blue
+      color = '#B5C7A3'; // Sage Green
     }
 
     return {
       text,
       style: {
-        backgroundColor: `${color}22`, // 13% opacity
+        backgroundColor: `${color}22`,
         color: color,
-        border: `1px solid ${color}66`, // 40% opacity
+        border: `1px solid ${color}4d`,
       },
       color
     };
@@ -142,14 +143,12 @@ export const DashboardView: React.FC = () => {
   // Handle Swipe Gesture Action
   const handleSwipeEnd = (info: any, task: Task) => {
     const swipeThreshold = 120;
-    if (info.offset.x > swipeThreshold) {
-      // Swiped right -> complete
+    if (info.offset.x < -swipeThreshold) {
+      // Swiped left -> delete task
+      deleteTask(task.id);
+    } else if (info.offset.x > swipeThreshold) {
+      // Swiped right -> complete task to 100%
       updateTaskProgress(task.id, 100);
-    } else if (info.offset.x < -swipeThreshold) {
-      // Swiped left -> lower priority to bottom
-      setSortMode('manual');
-      const otherTasks = tasks.filter(t => t.id !== task.id);
-      setTasksOrder([...otherTasks, task]);
     }
   };
 
@@ -161,20 +160,17 @@ export const DashboardView: React.FC = () => {
           display: 'flex', 
           justifyContent: 'space-between', 
           alignItems: 'center', 
-          background: 'rgba(138, 126, 114, 0.03)',
-          padding: '12px 16px',
+          background: 'var(--bg-card-hover)', 
+          padding: '12px 20px', 
           borderRadius: '16px',
-          border: '1px solid var(--border-color)',
-          flexWrap: 'wrap',
-          gap: '12px'
+          border: '1px solid var(--border-color)'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <ArrowUpDown size={16} style={{ color: 'var(--accent-blue)' }} />
-          <span style={{ fontSize: '14px', fontWeight: 600 }}>並び替えモード:</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)', fontSize: '14px' }}>
+          <ArrowUpDown size={16} />
+          <span>ソート設定:</span>
         </div>
-
-        <div className="view-tabs">
+        <div className="view-tabs" style={{ background: 'rgba(0,0,0,0.05)', border: 'none' }}>
           <button 
             className={`tab-btn ${sortMode === 'ai' ? 'active' : ''}`}
             onClick={() => setSortMode('ai')}
@@ -185,7 +181,7 @@ export const DashboardView: React.FC = () => {
             className={`tab-btn ${sortMode === 'manual' ? 'active' : ''}`}
             onClick={() => setSortMode('manual')}
           >
-            🤝 手動ドラッグ＆ドロップ
+            🤝 手動並び替え
           </button>
         </div>
       </div>
@@ -210,14 +206,14 @@ export const DashboardView: React.FC = () => {
                     borderRadius: '24px' 
                   }}
                 >
-                  未完了のタスクはありません！素晴らしい進捗です 🎉
+                  このグループのタスクはありません！素晴らしい進捗です 🎉
                 </div>
               ) : (
                 sortedActiveTasks.map((task, index) => {
                   const { score, remainingHours, isYabai, formula } = getPriorityInfo(task);
-                  const badge = getDeadlineBadge(task.progress_rate, remainingHours);
+                  const badge = getDeadlineBadge(task.progressRate, remainingHours);
                   const assignee = users.find(u => u.id === task.assigned_user_id);
-                  const hasChildren = tasks.some(t => t.parent_id === task.id);
+                  const hasChildren = tasks.some(t => t.parentId === task.id);
 
                   return (
                     <Draggable 
@@ -226,7 +222,7 @@ export const DashboardView: React.FC = () => {
                       index={index}
                       isDragDisabled={sortMode === 'ai'}
                     >
-                      {(provided) => (
+                      {(provided, snapshot) => (
                         <div
                           ref={provided.innerRef}
                           {...provided.draggableProps}
@@ -239,7 +235,7 @@ export const DashboardView: React.FC = () => {
                             ...provided.draggableProps.style,
                           }}
                         >
-                          {/* Swipe Background indicators */}
+                          {/* Swipe Underlay Indicators */}
                           <div style={{
                             position: 'absolute',
                             top: 0,
@@ -251,11 +247,13 @@ export const DashboardView: React.FC = () => {
                             alignItems: 'center',
                             padding: '0 24px',
                             borderRadius: '24px',
-                            background: 'linear-gradient(90deg, rgba(181,199,163,0.15) 0%, rgba(196,166,184,0.15) 100%)',
+                            background: 'linear-gradient(90deg, rgba(181,199,163,0.2) 0%, rgba(230,167,154,0.2) 100%)',
                             pointerEvents: 'none'
                           }}>
                             <span style={{ color: 'var(--accent-green)', fontWeight: 800, fontSize: '13px' }}>👉 右スワイプで完了</span>
-                            <span style={{ color: 'var(--accent-purple)', fontWeight: 800, fontSize: '13px' }}>優先度を下げる 左スワイプ 👈</span>
+                            <span style={{ color: 'var(--accent-red)', fontWeight: 800, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Trash2 size={14} /> 削除する 左スワイプ 👈
+                            </span>
                           </div>
 
                           <motion.div
@@ -263,7 +261,7 @@ export const DashboardView: React.FC = () => {
                             dragConstraints={{ left: 0, right: 0 }}
                             dragElastic={0.6}
                             onDragEnd={(_, info) => handleSwipeEnd(info, task)}
-                            className={`task-card-outer rounded-3xl shadow-sm border border-[#EAE3D8] dark:border-[#3E342F] bg-white dark:bg-[#2A231F] text-[#4A3E3D] dark:text-[#EAE3D8] transition-all duration-300 ${isYabai ? 'yabai-glow' : ''}`}
+                            className={`task-card-outer rounded-3xl shadow-sm border border-[#EAE3D8] dark:border-[#2D2D32] bg-white dark:bg-[#1E1E1E] text-[#4A3E3D] dark:text-[#FFFFFF] transition-all duration-300 ${isYabai ? 'yabai-glow' : ''}`}
                             style={{
                               display: 'flex',
                               alignItems: 'stretch',
@@ -273,23 +271,22 @@ export const DashboardView: React.FC = () => {
                               overflow: 'hidden'
                             }}
                           >
-                            {/* Left vertical line (width: 4px) */}
+                            {/* Left indicator strip */}
                             <div 
                               style={{
                                 width: '4px',
                                 backgroundColor: (() => {
-                                  if (task.progress_rate >= 100) return '#B5C7A3'; // Sage Green
-                                  if (remainingHours <= 0) return '#E6A79A'; // Terracotta
-                                  if (remainingHours < 24) return '#E6A79A'; // Terracotta
-                                  if (remainingHours < 72) return '#EED09D'; // Mustard
-                                  return '#B5C7A3'; // Sage Green
+                                  if (task.progressRate >= 100) return '#B5C7A3';
+                                  if (remainingHours <= 0) return '#E6A79A';
+                                  if (remainingHours < 24) return '#E6A79A';
+                                  if (remainingHours < 72) return '#EED09D';
+                                  return '#B5C7A3';
                                 })(),
                                 flexShrink: 0,
                                 alignSelf: 'stretch'
                               }}
                             />
 
-                            {/* Inner Padding Wrapper */}
                             <div
                               style={{
                                 display: 'flex',
@@ -316,7 +313,7 @@ export const DashboardView: React.FC = () => {
                                 </div>
                               )}
 
-                              {/* Left: Checkbox (hidden for parent tasks) */}
+                              {/* Left Checkbox (hidden for parent tasks) */}
                               {!hasChildren && (
                                 <button
                                   onClick={() => updateTaskProgress(task.id, 100)}
@@ -345,7 +342,7 @@ export const DashboardView: React.FC = () => {
                               {/* Middle: Info */}
                               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <span style={{ fontWeight: 700, fontSize: '16px' }} className="text-[#4A3E3D] dark:text-[#EAE3D8]">{task.title}</span>
+                                  <span style={{ fontWeight: 700, fontSize: '16px' }}>{task.title}</span>
                                   {isYabai && (
                                     <span 
                                       style={{ 
@@ -367,7 +364,7 @@ export const DashboardView: React.FC = () => {
                                 <div style={{ display: 'flex', gap: '16px', fontSize: '12px', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
                                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                     <Clock size={12} />
-                                    想定: {task.estimated_minutes}分
+                                    想定: {task.estimatedMinutes}分
                                   </span>
                                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                     <Calendar size={12} />
@@ -391,7 +388,7 @@ export const DashboardView: React.FC = () => {
 
                               {/* Right: Scores & Progress */}
                               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                {/* AI Score Badge with Formula Tooltip */}
+                                {/* AI Score Badge */}
                                 <div 
                                   className="priority-score" 
                                   style={{ cursor: 'help', position: 'relative' }}
@@ -406,7 +403,7 @@ export const DashboardView: React.FC = () => {
 
                                 {/* Progress bar */}
                                 <CircularProgressBar 
-                                  progress={task.progress_rate} 
+                                  progress={task.progressRate} 
                                   size={hasChildren ? 52 : 44} 
                                   strokeWidth={hasChildren ? 7 : 6} 
                                   color={badge.color}
@@ -414,9 +411,9 @@ export const DashboardView: React.FC = () => {
                               </div>
                             </div>
                           </motion.div>
-                      </div>
-                    )}
-                  </Draggable>
+                        </div>
+                      )}
+                    </Draggable>
                   );
                 })
               )}
@@ -452,12 +449,12 @@ export const DashboardView: React.FC = () => {
                 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    {new Date(task.deadline).toLocaleDateString()} 完了
+                    締切: {new Date(task.deadline).toLocaleDateString()}
                   </span>
                   <button
                     onClick={() => updateTaskProgress(task.id, 0)}
                     style={{
-                      background: 'rgba(255,255,255,0.05)',
+                      background: 'rgba(0,0,0,0.05)',
                       border: 'none',
                       color: 'var(--text-secondary)',
                       padding: '2px 8px',
