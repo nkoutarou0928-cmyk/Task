@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 
 // --- インターフェース定義 (完全な再帰的サブタスク構造型) ---
-interface TaskNode {
+interface Task {
   id: string;
   roomId?: string; // LARGE のみ保持
   title: string;
@@ -28,7 +28,7 @@ interface TaskNode {
   estimatedMinutes?: number; // LARGE のみ保持
   deadline?: string; // LARGE のみ保持 (ISO String)
   groupName?: string; // LARGE のみ保持
-  subtasks: TaskNode[]; // 傘下の子タスクを配列で保持
+  subtasks: Task[]; // 傘下の子タスクを配列で保持
 }
 
 interface Toast {
@@ -73,7 +73,7 @@ const TaskCheckbox: React.FC<{
 
 export const TasknowEvolution: React.FC = () => {
   // --- 状態管理 (初期ステートは完全に空からスタート) ---
-  const [tasks, setTasks] = useState<TaskNode[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [activeTab, setActiveTab] = useState<'list' | 'calendar'>('list');
   const [aiSortActive, setAiSortActive] = useState(false);
   const [simulatedTime] = useState<Date>(new Date());
@@ -135,7 +135,7 @@ export const TasknowEvolution: React.FC = () => {
 
   // --- ヘルパー関数 ---
   // 進捗率の自動再計算 (小 ➔ 中 ➔ 大の完全階層連動)
-  function calculateProgress(node: TaskNode): TaskNode {
+  function calculateProgress(node: Task): Task {
     if (node.type === 'SMALL') {
       return {
         ...node,
@@ -176,7 +176,7 @@ export const TasknowEvolution: React.FC = () => {
   // 再帰的なノード削除
   const deleteNode = (idToDelete: string) => {
     setTasks(prev => {
-      const removeNode = (nodes: TaskNode[]): TaskNode[] => {
+      const removeNode = (nodes: Task[]): Task[] => {
         return nodes
           .filter(n => n.id !== idToDelete)
           .map(n => {
@@ -197,7 +197,7 @@ export const TasknowEvolution: React.FC = () => {
     const activeCompletedIds = new Set<string>();
 
     // 再帰的にすべての完了ノードIDを抽出
-    const traverse = (node: TaskNode) => {
+    const traverse = (node: Task) => {
       if (node.isCompleted) {
         activeCompletedIds.add(node.id);
       }
@@ -295,7 +295,7 @@ export const TasknowEvolution: React.FC = () => {
   };
 
   // 優先順スコア計算式（裏側の計算は維持）
-  const getPriorityScore = (task: TaskNode) => {
+  const getPriorityScore = (task: Task) => {
     const deadlineStr = task.deadline || new Date().toISOString();
     const deadlineDate = new Date(deadlineStr);
     const remainingMs = deadlineDate.getTime() - simulatedTime.getTime();
@@ -338,7 +338,7 @@ export const TasknowEvolution: React.FC = () => {
 
     setTasks(prev => prev.map(t => {
       if (t.id !== largeId) return t;
-      const newMedium: TaskNode = {
+      const newMedium: Task = {
         id: 'medium-' + Math.random().toString(36).substr(2, 9),
         title: inputTitle.trim(),
         type: 'MEDIUM',
@@ -362,7 +362,7 @@ export const TasknowEvolution: React.FC = () => {
       if (t.id !== largeId) return t;
       const updatedSubtasks = t.subtasks.map(m => {
         if (m.id !== mediumId) return m;
-        const newSmall: TaskNode = {
+        const newSmall: Task = {
           id: 'small-' + Math.random().toString(36).substr(2, 9),
           title: inputTitle.trim(),
           type: 'SMALL',
@@ -542,7 +542,7 @@ export const TasknowEvolution: React.FC = () => {
     const deadlineDate = new Date(`${taskDeadline}T18:00:00`);
 
     const onComplete = () => {
-      const newTask: TaskNode = {
+      const newTask: Task = {
         id: 'large-' + Math.random().toString(36).substr(2, 9),
         roomId: activeRoomId,
         title: inputText.trim(),
