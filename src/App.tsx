@@ -1,4 +1,3 @@
-import React from 'react';
 import { TasknowEvolution } from './components/TasknowEvolution';
 
 function App() {

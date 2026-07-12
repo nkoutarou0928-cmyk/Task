@@ -1,13 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Plus, 
   Trash2, 
-  CheckSquare, 
   Calendar as CalendarIcon, 
   List, 
   Zap, 
-  Users, 
   Send, 
   ChevronDown, 
   ChevronRight, 
@@ -134,7 +131,7 @@ export const TasknowEvolution: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'list' | 'calendar'>('list');
   const [selectedGroup, setSelectedGroup] = useState<'大学の講義 🌿' | 'サークル 📣' | 'プライベート ☕️'>('大学の講義 🌿');
   const [aiSortActive, setAiSortActive] = useState(false);
-  const [simulatedTime, setSimulatedTime] = useState<Date>(new Date());
+  const [simulatedTime] = useState<Date>(new Date());
   const [inputText, setInputText] = useState('');
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({
     'large-1': true,
@@ -257,7 +254,7 @@ export const TasknowEvolution: React.FC = () => {
     if (!inputText.trim()) return;
 
     // 簡易的な自然言語処理による自動分類
-    let targetGroup: '大学の講義 🌿' | 'サークル 📣' | 'プライベート ☕' = '大学の講義 🌿';
+    let targetGroup: '大学の講義 🌿' | 'サークル 📣' | 'プライベート ☕️' = '大学の講義 🌿';
     let estimatedMinutes = 60;
     let daysToAdd = 1;
 
