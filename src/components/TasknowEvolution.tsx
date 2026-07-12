@@ -11,7 +11,12 @@ import {
   Clock, 
   Calendar as DateIcon,
   RefreshCw,
-  Bell
+  Bell,
+  Plus,
+  FolderPlus,
+  Users,
+  CheckCircle2,
+  Circle
 } from 'lucide-react';
 
 // --- インターフェース定義 ---
@@ -30,11 +35,12 @@ interface MediumTask {
 
 interface LargeTask {
   id: string;
+  roomId: string; // 紐づくシェアルームのID
   title: string;
   progressRate: number; // 下位の中タスクの平均値から自動計算
   estimatedMinutes: number;
   deadline: string; // ISO String
-  groupName: '大学の講義 🌿' | 'サークル 📣' | 'プライベート ☕️';
+  groupName: string; // 動的グループ名
   subtasks: MediumTask[];
 }
 
@@ -44,101 +50,46 @@ interface Toast {
   type: 'info' | 'success' | 'warning';
 }
 
-export const TasknowEvolution: React.FC = () => {
-  // --- モックデータ初期設定 (3階層タスク構造) ---
-  const initialTasks: LargeTask[] = [
-    {
-      id: 'large-1',
-      title: 'ゼミの共同発表資料作成',
-      progressRate: 0,
-      estimatedMinutes: 330,
-      deadline: new Date(Date.now() + 28 * 60 * 60 * 1000).toISOString(), // 約28時間後
-      groupName: '大学の講義 🌿',
-      subtasks: [
-        {
-          id: 'medium-1-1',
-          title: '文献調査・資料集め',
-          progressRate: 0,
-          subtasks: [
-            { id: 'small-1-1-1', title: '先行研究の論文検索', completed: true },
-            { id: 'small-1-1-2', title: '参考文献のPDF保存', completed: true }
-          ]
-        },
-        {
-          id: 'medium-1-2',
-          title: 'スライド資料の執筆',
-          progressRate: 0,
-          subtasks: [
-            { id: 'small-1-2-1', title: 'イントロダクション作成', completed: true },
-            { id: 'small-1-2-2', title: '提案手法スライド執筆', completed: false },
-            { id: 'small-1-2-3', title: '評価結果グラフ描画', completed: false }
-          ]
-        }
-      ]
-    },
-    {
-      id: 'large-2',
-      title: '夏合宿の案内チラシ作成',
-      progressRate: 0,
-      estimatedMinutes: 180,
-      deadline: new Date(Date.now() + 75 * 60 * 60 * 1000).toISOString(), // 約75時間後
-      groupName: 'サークル 📣',
-      subtasks: [
-        {
-          id: 'medium-2-1',
-          title: 'デザイン原案作成',
-          progressRate: 0,
-          subtasks: [
-            { id: 'small-2-1-1', title: 'ラフスケッチ作成', completed: false },
-            { id: 'small-2-1-2', title: 'イラストレーターでの清書', completed: false }
-          ]
-        },
-        {
-          id: 'medium-2-2',
-          title: '部室での配布準備',
-          progressRate: 0,
-          subtasks: [
-            { id: 'small-2-2-1', title: 'チラシ印刷と製本', completed: false }
-          ]
-        }
-      ]
-    },
-    {
-      id: 'large-3',
-      title: '就活エントリーシート提出',
-      progressRate: 0,
-      estimatedMinutes: 150,
-      deadline: new Date(Date.now() + 18 * 60 * 60 * 1000).toISOString(), // 約18時間後
-      groupName: 'プライベート ☕️',
-      subtasks: [
-        {
-          id: 'medium-3-1',
-          title: '自己PRの作成',
-          progressRate: 0,
-          subtasks: [
-            { id: 'small-3-1-1', title: 'エピソードの整理と箇条書き', completed: true },
-            { id: 'small-3-1-2', title: '400文字での推敲・清書', completed: false }
-          ]
-        }
-      ]
-    }
-  ];
+interface Room {
+  id: string;
+  name: string;
+}
 
+export const TasknowEvolution: React.FC = () => {
   // --- 状態管理 ---
-  const [tasks, setTasks] = useState<LargeTask[]>(() => 
-    initialTasks.map(calculateProgress)
-  );
+  // 初期タスクは完全にクリーンな空状態（Empty State）から開始
+  const [tasks, setTasks] = useState<LargeTask[]>([]);
+  
   const [activeTab, setActiveTab] = useState<'list' | 'calendar'>('list');
-  const [selectedGroup, setSelectedGroup] = useState<'大学の講義 🌿' | 'サークル 📣' | 'プライベート ☕️'>('大学の講義 🌿');
   const [aiSortActive, setAiSortActive] = useState(false);
   const [simulatedTime] = useState<Date>(new Date());
   const [inputText, setInputText] = useState('');
-  const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({
-    'large-1': true,
-    'large-2': true,
-    'large-3': true
-  });
-  
+  const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
+
+  // 動的グループ（リスト）の管理
+  const [groups, setGroups] = useState<string[]>([
+    '大学の講義 🌿', 
+    'サークル 📣', 
+    'プライベート ☕️'
+  ]);
+  const [selectedGroup, setSelectedGroup] = useState<string>('大学の講義 🌿');
+  const [showAddGroupInput, setShowAddGroupInput] = useState(false);
+  const [newGroupNameInput, setNewGroupNameInput] = useState('');
+
+  // 動的シェアルームの管理
+  const [rooms, setRooms] = useState<Room[]>([
+    { id: 'room-1', name: '大学生活 🏫' },
+    { id: 'room-2', name: '経済学共同課題 👥' }
+  ]);
+  const [activeRoomId, setActiveRoomId] = useState<string>('room-1');
+  const [showRoomDropdown, setShowRoomDropdown] = useState(false);
+  const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
+  const [newRoomNameInput, setNewRoomNameInput] = useState('');
+
+  // インラインの中・小タスク追加用テキスト入力バッファ
+  const [newMediumInputs, setNewMediumInputs] = useState<Record<string, string>>({});
+  const [newSmallInputs, setNewSmallInputs] = useState<Record<string, string>>({});
+
   // スライムアニメーション用
   const [slimeAnim, setSlimeAnim] = useState<{
     active: boolean;
@@ -149,13 +100,6 @@ export const TasknowEvolution: React.FC = () => {
     endX: number;
     endY: number;
   } | null>(null);
-
-  // グループフォルダ内タスクカウンタ
-  const [groupCounts, setGroupCounts] = useState<Record<string, number>>({
-    '大学の講義 🌿': 1,
-    'サークル 📣': 1,
-    'プライベート ☕️': 1
-  });
 
   // トーストメッセージキュー
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -218,7 +162,6 @@ export const TasknowEvolution: React.FC = () => {
   };
 
   // AI流動的優先度スコア計算式
-  // P = (想定所要時間 * (100 - 現在の達成度)) / (締切までの残り時間 + 1)
   const getPriorityScore = (task: LargeTask) => {
     const deadlineDate = new Date(task.deadline);
     const remainingMs = deadlineDate.getTime() - simulatedTime.getTime();
@@ -228,9 +171,9 @@ export const TasknowEvolution: React.FC = () => {
     return score;
   };
 
-  // タスクのソート＆フィルタリング
+  // 現在のルームと選択グループに適合するタスクのソート＆フィルタリング
   const getFilteredAndSortedTasks = () => {
-    const filtered = tasks.filter(t => t.groupName === selectedGroup);
+    const filtered = tasks.filter(t => t.roomId === activeRoomId && t.groupName === selectedGroup);
     if (!aiSortActive) return filtered;
     
     return [...filtered].sort((a, b) => {
@@ -238,66 +181,140 @@ export const TasknowEvolution: React.FC = () => {
     });
   };
 
+  // 動的グループ別タスク件数の集計
+  const getGroupTaskCount = (groupName: string) => {
+    return tasks.filter(t => t.roomId === activeRoomId && t.groupName === groupName).length;
+  };
+
   // スワイプによる削除
   const handleDeleteTask = (id: string, title: string) => {
     setTasks(prev => prev.filter(t => t.id !== id));
     addToast(`『${title}』を削除しました`, 'warning');
-    setGroupCounts(prev => ({
-      ...prev,
-      [selectedGroup]: Math.max(0, prev[selectedGroup] - 1)
-    }));
   };
 
-  // 1行入力送信 ➔ スライム風船ジャンプ
+  // --- 動的な中・小タスクインライン追加 ---
+  const handleAddMediumTask = (largeId: string, e: React.FormEvent) => {
+    e.preventDefault();
+    const inputTitle = newMediumInputs[largeId];
+    if (!inputTitle || !inputTitle.trim()) return;
+
+    setTasks(prev => prev.map(t => {
+      if (t.id !== largeId) return t;
+      const newMedium: MediumTask = {
+        id: 'medium-' + Math.random().toString(36).substr(2, 9),
+        title: inputTitle.trim(),
+        progressRate: 0,
+        subtasks: []
+      };
+      return calculateProgress({ ...t, subtasks: [...t.subtasks, newMedium] });
+    }));
+
+    setNewMediumInputs(prev => ({ ...prev, [largeId]: '' }));
+    addToast(`ステップ『${inputTitle}』を追加しました`, 'success');
+  };
+
+  const handleAddSmallTask = (largeId: string, mediumId: string, e: React.FormEvent) => {
+    e.preventDefault();
+    const inputTitle = newSmallInputs[mediumId];
+    if (!inputTitle || !inputTitle.trim()) return;
+
+    setTasks(prev => prev.map(t => {
+      if (t.id !== largeId) return t;
+      const updatedSubtasks = t.subtasks.map(m => {
+        if (m.id !== mediumId) return m;
+        const newSmall: SmallTask = {
+          id: 'small-' + Math.random().toString(36).substr(2, 9),
+          title: inputTitle.trim(),
+          completed: false
+        };
+        return { ...m, subtasks: [...m.subtasks, newSmall] };
+      });
+      return calculateProgress({ ...t, subtasks: updatedSubtasks });
+    }));
+
+    setNewSmallInputs(prev => ({ ...prev, [mediumId]: '' }));
+    addToast(`作業項目『${inputTitle}』を追加しました`, 'success');
+  };
+
+  // --- 動的グループ追加 ---
+  const handleAddGroupSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newGroupNameInput.trim()) return;
+
+    const formattedName = newGroupNameInput.trim();
+    if (groups.includes(formattedName)) {
+      addToast('同名のグループがすでに存在します。', 'warning');
+      return;
+    }
+
+    setGroups(prev => [...prev, formattedName]);
+    setSelectedGroup(formattedName);
+    setNewGroupNameInput('');
+    setShowAddGroupInput(false);
+    addToast(`グループ『${formattedName}』を作成しました！`, 'success');
+  };
+
+  // --- 動的シェアルーム追加 ---
+  const handleCreateRoomSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newRoomNameInput.trim()) return;
+
+    const newId = 'room-' + Math.random().toString(36).substr(2, 9);
+    const newRoom: Room = {
+      id: newId,
+      name: newRoomNameInput.trim() + ' 👥'
+    };
+
+    setRooms(prev => [...prev, newRoom]);
+    setActiveRoomId(newId);
+    setNewRoomNameInput('');
+    setShowCreateRoomModal(false);
+    addToast(`シェアルーム『${newRoom.name}』を作成しました！`, 'success');
+  };
+
+  // --- 1行入力送信 ➔ スライム風船ジャンプ ---
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim()) return;
 
-    // 簡易的な自然言語処理による自動分類
-    let targetGroup: '大学の講義 🌿' | 'サークル 📣' | 'プライベート ☕️' = '大学の講義 🌿';
+    // 現在のアクティブなグループをデフォルトに
+    let targetGroup = selectedGroup;
     let estimatedMinutes = 60;
     let daysToAdd = 1;
 
+    // 自然言語分類機能 (インテリジェント・フォールバック)
     const text = inputText.toLowerCase();
-    if (text.includes('サークル') || text.includes('合宿') || text.includes('部活') || text.includes('チラシ')) {
-      targetGroup = 'サークル 📣';
-      estimatedMinutes = 120;
-      daysToAdd = 3;
-    } else if (text.includes('プライベート') || text.includes('カフェ') || text.includes('バイト') || text.includes('遊び') || text.includes('es') || text.includes('就活')) {
-      targetGroup = 'プライベート ☕️';
+    const matchedGroup = groups.find(g => {
+      const cleanG = g.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "").trim().toLowerCase();
+      return text.includes(cleanG);
+    });
+
+    if (matchedGroup) {
+      targetGroup = matchedGroup;
       estimatedMinutes = 90;
       daysToAdd = 2;
     }
 
-    // 要素の座標を取得してジャンプアニメーションを設定
-    const inputEl = document.getElementById('slime-input-container');
-    const badgeEl = document.getElementById(`badge-item-${targetGroup}`);
-
     const onComplete = () => {
       const newTask: LargeTask = {
         id: 'large-' + Math.random().toString(36).substr(2, 9),
-        title: inputText,
+        roomId: activeRoomId,
+        title: inputText.trim(),
         progressRate: 0,
         estimatedMinutes,
         deadline: new Date(Date.now() + daysToAdd * 24 * 60 * 60 * 1000).toISOString(),
         groupName: targetGroup,
-        subtasks: [
-          {
-            id: 'medium-new-' + Math.random().toString(36).substr(2, 9),
-            title: '初期ステップ',
-            progressRate: 0,
-            subtasks: [
-              { id: 'small-new-1', title: '詳細タスクを計画する', completed: false }
-            ]
-          }
-        ]
+        subtasks: []
       };
       
-      setTasks(prev => [...prev, calculateProgress(newTask)]);
+      setTasks(prev => [...prev, newTask]);
       setInputText('');
-      setGroupCounts(prev => ({ ...prev, [targetGroup]: prev[targetGroup] + 1 }));
-      addToast(`新規タスク『${inputText}』を作成しました！`, 'success');
+      setExpandedTasks(prev => ({ ...prev, [newTask.id]: true }));
+      addToast(`タスク『${inputText}』を追加しました！`, 'success');
     };
+
+    const inputEl = document.getElementById('slime-input-container');
+    const badgeEl = document.getElementById(`badge-item-${targetGroup}`);
 
     if (inputEl && badgeEl) {
       const inputRect = inputEl.getBoundingClientRect();
@@ -318,7 +335,7 @@ export const TasknowEvolution: React.FC = () => {
         endY
       });
 
-      // スライム衝突時の触覚フィードバック演出
+      // アタッチ時の弾力バウンスフィードバック
       setTimeout(() => {
         const targetBadge = document.getElementById(`badge-item-${targetGroup}`);
         if (targetBadge) {
@@ -336,31 +353,51 @@ export const TasknowEvolution: React.FC = () => {
   // チームルーム同期デモ (Websocket風モック)
   const triggerSyncDemo = () => {
     if (syncing) return;
+
+    // 現在のルーム内にタスクがあるかチェック
+    const roomTasks = tasks.filter(t => t.roomId === activeRoomId);
+    if (roomTasks.length === 0) {
+      addToast('同期するタスクがありません。まずはタスクと子タスクを追加してください。', 'warning');
+      return;
+    }
+
+    // 小タスクが存在するタスクを探索
+    const targetTask = roomTasks.find(t => t.subtasks.some(m => m.subtasks.length > 0));
+    if (!targetTask) {
+      addToast('同期シミュレート用の子タスクが見つかりません。タスクにステップと作業項目を追加してください。', 'warning');
+      return;
+    }
+
     setSyncing(true);
     addToast('シェアルームの共同タスク同期中...', 'info');
 
     setTimeout(() => {
-      // ゼミの共同タスクの「提案手法スライド執筆」を遠隔でチェックするシミュレーション
+      // 最初の未完了の小タスクを完了に書き換える
+      let simulatedTitle = '';
       setTasks(prev => prev.map(large => {
-        if (large.id !== 'large-1') return large;
+        if (large.id !== targetTask.id) return large;
 
         const updatedSubtasks = large.subtasks.map(medium => {
-          if (medium.id !== 'medium-1-2') return medium;
-
+          let updated = false;
           const updatedSmalls = medium.subtasks.map(small => {
-            if (small.id === 'small-1-2-2') {
-              return { ...small, completed: true }; // 遠隔同期で完了へ
+            if (!small.completed && !updated) {
+              simulatedTitle = small.title;
+              updated = true;
+              return { ...small, completed: true };
             }
             return small;
           });
-
           return { ...medium, subtasks: updatedSmalls };
         });
 
         return calculateProgress({ ...large, subtasks: updatedSubtasks });
       }));
 
-      addToast('Bさんが『提案手法スライド執筆』を完了しました！', 'success');
+      if (simulatedTitle) {
+        addToast(`Bさんが『${simulatedTitle}』を完了しました！`, 'success');
+      } else {
+        addToast('すべての作業項目がすでに完了しています。', 'info');
+      }
       setSyncing(false);
     }, 2000);
   };
@@ -373,7 +410,6 @@ export const TasknowEvolution: React.FC = () => {
     const date = new Date(year, month, 1);
     const days: (number | null)[] = [];
     
-    // 最初の日の曜日分空欄を埋める (1日は水曜日 ➔ 3つ空ける)
     const startDay = date.getDay();
     for (let i = 0; i < startDay; i++) {
       days.push(null);
@@ -390,30 +426,78 @@ export const TasknowEvolution: React.FC = () => {
   const calendarDays = getDaysInMonth();
   const weekDays = ['日', '月', '火', '水', '木', '金', '土'];
 
-  // カレンダー日付セルのタスク有無検知
+  // 当日の締め切りタスク抽出
   const getTasksForDay = (day: number) => {
     return tasks.filter(t => {
+      if (t.roomId !== activeRoomId) return false;
       const d = new Date(t.deadline);
       return d.getDate() === day && d.getMonth() === 6 && d.getFullYear() === 2026;
     });
   };
 
+  const activeRoom = rooms.find(r => r.id === activeRoomId) || rooms[0];
+
   return (
-    <div className="min-height-screen bg-[#FDFBF7] text-[#3E3A35] font-sans pb-32 flex flex-col items-center">
-      {/* --- ヘッダー --- */}
+    <div className="min-h-screen bg-[#FDFBF7] text-[#3E3A35] font-sans pb-32 flex flex-col items-center">
+      {/* --- ヘッダー (極限ミニマル化) --- */}
       <header className="w-full max-w-4xl px-6 py-6 flex justify-between items-center border-b border-[#EAE3D8]">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight flex items-center gap-2 text-[#3E3A35]">
-            Tasknow <span className="text-xs bg-[#B5C7A3] text-[#3E3A35] px-2 py-0.5 rounded-full font-bold">EVOLUTION</span>
+          <h1 className="text-2xl font-extrabold tracking-tight text-[#3E3A35]">
+            Tasknow
           </h1>
-          <p className="text-xs text-[#8A7E72] mt-1">Cozy & Minimalist Collective Workspace</p>
         </div>
 
-        {/* シェアルームインジケーター ＆ 同期デモボタン */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-[#FFFFFF] border border-[#EAE3D8] px-4 py-2 rounded-full text-xs font-semibold shadow-sm">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#B5C7A3] animate-pulse"></span>
-            <span>経済学共同課題 👥</span>
+        {/* シェアルーム切り替え・作成機能 */}
+        <div className="flex items-center gap-3 relative">
+          <div className="relative">
+            <button
+              onClick={() => setShowRoomDropdown(!showRoomDropdown)}
+              className="flex items-center gap-2 bg-[#FFFFFF] border border-[#EAE3D8] hover:bg-[#FDFBF7] px-4 py-2 rounded-full text-xs font-semibold shadow-sm transition-all"
+            >
+              <Users size={13} className="text-[#8A7E72]" />
+              <span>{activeRoom.name}</span>
+              <ChevronDown size={12} className="text-[#8A7E72]" />
+            </button>
+
+            {/* ルーム選択ドロップダウンパネル */}
+            {showRoomDropdown && (
+              <div className="absolute right-0 mt-2 w-52 bg-[#FFFFFF] border border-[#EAE3D8] rounded-2xl shadow-lg p-2 z-[200]">
+                <div className="text-[10px] text-[#8A7E72] font-bold px-3 py-1.5 border-b border-[#F3EDE2]">
+                  シェアルームの選択
+                </div>
+                {rooms.map(room => (
+                  <button
+                    key={room.id}
+                    onClick={() => {
+                      setActiveRoomId(room.id);
+                      setShowRoomDropdown(false);
+                      addToast(`シェアルームを『${room.name}』に切り替えました`, 'info');
+                    }}
+                    className={`w-full text-left px-3 py-2 rounded-xl text-xs flex justify-between items-center transition-all ${
+                      activeRoomId === room.id 
+                        ? 'bg-[#B5C7A3] text-[#3E3A35] font-bold' 
+                        : 'hover:bg-[#FDFBF7] text-[#3E3A35]'
+                    }`}
+                  >
+                    <span>{room.name}</span>
+                    {activeRoomId === room.id && <CheckCircle2 size={12} />}
+                  </button>
+                ))}
+                
+                <div className="border-t border-[#F3EDE2] mt-2 pt-2">
+                  <button
+                    onClick={() => {
+                      setShowCreateRoomModal(true);
+                      setShowRoomDropdown(false);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-extrabold text-[#8BA6A9] hover:bg-[#FDFBF7] flex items-center gap-1.5"
+                  >
+                    <Plus size={13} />
+                    新規ルームを作成
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <button
@@ -422,7 +506,7 @@ export const TasknowEvolution: React.FC = () => {
             className="flex items-center gap-1.5 bg-[#F3EDE2] hover:bg-[#EAE3D8] active:scale-95 transition-all text-xs font-bold px-4 py-2 rounded-full border border-[#EAE3D8]"
           >
             <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />
-            遠隔同期デモ
+            同期デモ
           </button>
         </div>
       </header>
@@ -452,12 +536,12 @@ export const TasknowEvolution: React.FC = () => {
             </button>
           </div>
 
-          {/* AIソートトグルボタン */}
+          {/* AIソートトグル */}
           {activeTab === 'list' && (
             <button
               onClick={() => {
                 setAiSortActive(!aiSortActive);
-                addToast(`AI動的ソートを${!aiSortActive ? 'ON' : 'OFF'}にしました`, 'info');
+                addToast(`AI優先度ソートを${!aiSortActive ? 'ON' : 'OFF'}にしました`, 'info');
               }}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold transition-all border ${
                 aiSortActive 
@@ -466,15 +550,16 @@ export const TasknowEvolution: React.FC = () => {
               }`}
             >
               <Zap size={14} />
-              AI優先度ソート: {aiSortActive ? 'ON' : 'OFF'}
+              AIソート: {aiSortActive ? 'ON' : 'OFF'}
             </button>
           )}
         </div>
 
-        {/* --- グループフォルダ・カプセルバッジ (アタッチメント先) --- */}
-        <div className="flex justify-center gap-4 mb-6">
-          {(['大学の講義 🌿', 'サークル 📣', 'プライベート ☕️'] as const).map(group => {
+        {/* --- グループフォルダ・カプセルバッジ (動的追加・削除対応) --- */}
+        <div className="flex flex-wrap justify-center items-center gap-3 mb-6">
+          {groups.map(group => {
             const isActive = selectedGroup === group;
+            const count = getGroupTaskCount(group);
             return (
               <button
                 key={group}
@@ -485,23 +570,60 @@ export const TasknowEvolution: React.FC = () => {
                     ? 'bg-[#B5C7A3] border-[#B5C7A3] text-[#3E3A35] font-extrabold shadow-sm scale-105' 
                     : 'bg-[#FFFFFF] border-[#EAE3D8] text-[#8A7E72] hover:bg-[#FDFBF7]'
                 }`}
-                style={{
-                  transformOrigin: 'center'
-                }}
               >
                 <span>{group}</span>
                 <span className="text-[10px] bg-[#3E3A35] text-[#FFFFFF] px-2 py-0.5 rounded-full">
-                  {groupCounts[group]}
+                  {count}
                 </span>
               </button>
             );
           })}
+
+          {/* 動的グループ追加ボタン */}
+          <div className="relative">
+            {!showAddGroupInput ? (
+              <button
+                onClick={() => setShowAddGroupInput(true)}
+                className="flex items-center justify-center bg-[#F3EDE2] hover:bg-[#EAE3D8] text-[#3E3A35] w-9 h-9 rounded-full border border-[#EAE3D8] transition-all"
+                title="新しいグループを追加"
+              >
+                <FolderPlus size={16} />
+              </button>
+            ) : (
+              <form 
+                onSubmit={handleAddGroupSubmit}
+                className="flex items-center bg-[#FFFFFF] border border-[#EAE3D8] rounded-full p-1 shadow-sm gap-1"
+              >
+                <input
+                  type="text"
+                  placeholder="グループ名 (例: バイト 💰)"
+                  value={newGroupNameInput}
+                  onChange={(e) => setNewGroupNameInput(e.target.value)}
+                  className="px-3 py-1 outline-none text-xs bg-transparent border-none text-[#3E3A35] w-40"
+                  autoFocus
+                />
+                <button
+                  type="submit"
+                  className="bg-[#B5C7A3] text-[#3E3A35] text-xs font-bold px-3 py-1 rounded-full border-none cursor-pointer"
+                >
+                  追加
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddGroupInput(false)}
+                  className="text-xs text-[#8A7E72] px-2"
+                >
+                  閉
+                </button>
+              </form>
+            )}
+          </div>
         </div>
 
-        {/* --- ビュー切替表示エリア --- */}
+        {/* --- ビュー表示エリア --- */}
         <div className="flex-1">
           {activeTab === 'list' ? (
-            /* --- リストビュー (タイムライン形式) --- */
+            /* --- リストビュー --- */
             <div className="flex flex-col gap-4">
               <AnimatePresence initial={false}>
                 {getFilteredAndSortedTasks().length === 0 ? (
@@ -511,21 +633,21 @@ export const TasknowEvolution: React.FC = () => {
                     exit={{ opacity: 0 }}
                     className="p-12 text-center text-[#8A7E72] bg-[#FFFFFF] border border-[#EAE3D8] rounded-3xl"
                   >
-                    このフォルダのタスクはすべて完了しました 🎉
+                    タスクがありません。最下部の入力バーから追加してください。
                   </motion.div>
                 ) : (
                   getFilteredAndSortedTasks().map(largeTask => {
                     const expanded = !!expandedTasks[largeTask.id];
                     return (
                       <div key={largeTask.id} className="relative overflow-hidden rounded-3xl">
-                        {/* 左スワイプ削除のインジケータ背景 */}
+                        {/* スワイプ削除用インジケータ背景 */}
                         <div className="absolute inset-0 bg-[#E6A79A] flex justify-end items-center pr-6 rounded-3xl pointer-events-none">
                           <span className="text-[#3E3A35] font-bold text-xs flex items-center gap-1">
                             <Trash2 size={14} /> 左スワイプで削除
                           </span>
                         </div>
 
-                        {/* タスクカード本体 */}
+                        {/* カード本体 */}
                         <motion.div
                           drag="x"
                           dragConstraints={{ right: 0, left: -140 }}
@@ -540,7 +662,7 @@ export const TasknowEvolution: React.FC = () => {
                           whileDrag={{ scale: 1.02, boxShadow: '0px 10px 25px rgba(62, 58, 53, 0.1)' }}
                           className="relative bg-[#FFFFFF] border border-[#EAE3D8] rounded-3xl p-5 flex flex-col gap-4 cursor-pointer select-none"
                         >
-                          {/* 大タスク・ヘッダー部分 */}
+                          {/* 大タスクヘッダー */}
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3 flex-1" onClick={() => toggleExpand(largeTask.id)}>
                               <div className="text-[#8A7E72]">
@@ -559,15 +681,14 @@ export const TasknowEvolution: React.FC = () => {
                               </div>
                             </div>
 
-                            {/* 進捗円形バー ＆ AIソートスコア */}
+                            {/* 円形ゲージ ＆ AIスコア */}
                             <div className="flex items-center gap-3">
                               {aiSortActive && (
                                 <div className="bg-[#F3EDE2] text-[#3E3A35] border border-[#EAE3D8] text-[10px] font-extrabold px-2 py-1 rounded-md">
-                                  AI優先度: {getPriorityScore(largeTask)}
+                                  スコア: {getPriorityScore(largeTask)}
                                 </div>
                               )}
                               <div className="relative w-12 h-12 flex items-center justify-center">
-                                {/* SVGサークルプログレス */}
                                 <svg className="w-12 h-12 transform -rotate-90">
                                   <circle cx="24" cy="24" r="18" stroke="#F3EDE2" strokeWidth="3" fill="transparent" />
                                   <circle 
@@ -587,19 +708,20 @@ export const TasknowEvolution: React.FC = () => {
                             </div>
                           </div>
 
-                          {/* 3階層子タスクエリア (中タスク・小タスク) */}
+                          {/* 3階層アコーディオンコンテンツ */}
                           <AnimatePresence initial={false}>
                             {expanded && (
                               <motion.div
                                 initial={{ height: 0, opacity: 0 }}
                                 animate={{ height: 'auto', opacity: 1 }}
                                 exit={{ height: 0, opacity: 0 }}
-                                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                                transition={{ duration: 0.3 }}
                                 className="overflow-hidden border-t border-[#F3EDE2] pt-4 flex flex-col gap-4"
+                                onClick={(e) => e.stopPropagation()} // 親アコーディオンの開閉を阻止
                               >
                                 {largeTask.subtasks.map(mediumTask => (
                                   <div key={mediumTask.id} className="bg-[#FDFBF7] p-4 rounded-2xl border border-[#EAE3D8] flex flex-col gap-3">
-                                    {/* 中タスク項目ヘッダー */}
+                                    {/* 中タスク項目 */}
                                     <div className="flex justify-between items-center">
                                       <span className="text-xs font-bold text-[#3E3A35]">【中】{mediumTask.title}</span>
                                       <span className="text-[10px] bg-[#EAE3D8] px-2 py-0.5 rounded-full font-bold">
@@ -607,7 +729,7 @@ export const TasknowEvolution: React.FC = () => {
                                       </span>
                                     </div>
 
-                                    {/* 中タスク専用の細身プログレスバー */}
+                                    {/* プログレスバー */}
                                     <div className="w-full bg-[#F3EDE2] h-1 rounded-full overflow-hidden">
                                       <div 
                                         className="bg-[#B5C7A3] h-full transition-all duration-500 ease-out" 
@@ -634,8 +756,49 @@ export const TasknowEvolution: React.FC = () => {
                                         </label>
                                       ))}
                                     </div>
+
+                                    {/* 新規 小タスク（作業項目）インライン追加フォーム */}
+                                    <form 
+                                      onSubmit={(e) => handleAddSmallTask(largeTask.id, mediumTask.id, e)}
+                                      className="flex items-center gap-1.5 border-t border-[#F3EDE2] pt-2 mt-1"
+                                    >
+                                      <input 
+                                        type="text" 
+                                        placeholder="小タスク (作業項目) を追加..."
+                                        value={newSmallInputs[mediumTask.id] || ''}
+                                        onChange={(e) => setNewSmallInputs(prev => ({ ...prev, [mediumTask.id]: e.target.value }))}
+                                        className="flex-1 bg-transparent border-none text-[11px] outline-none py-1 placeholder-[#B5A89E] text-[#3E3A35]"
+                                      />
+                                      <button 
+                                        type="submit" 
+                                        className="bg-transparent border-none text-[#8BA6A9] cursor-pointer"
+                                        title="小タスクを追加"
+                                      >
+                                        <Plus size={14} />
+                                      </button>
+                                    </form>
                                   </div>
                                 ))}
+
+                                {/* 新規 中タスク（ステップ）追加フォーム */}
+                                <form 
+                                  onSubmit={(e) => handleAddMediumTask(largeTask.id, e)}
+                                  className="flex items-center gap-2 bg-[#FFFFFF] border border-[#EAE3D8] rounded-xl px-4 py-2"
+                                >
+                                  <input 
+                                    type="text"
+                                    placeholder="新しいステップ (中タスク) を追加..."
+                                    value={newMediumInputs[largeTask.id] || ''}
+                                    onChange={(e) => setNewMediumInputs(prev => ({ ...prev, [largeTask.id]: e.target.value }))}
+                                    className="flex-1 bg-transparent border-none text-xs outline-none py-1 placeholder-[#B5A89E] text-[#3E3A35]"
+                                  />
+                                  <button 
+                                    type="submit"
+                                    className="bg-[#F3EDE2] hover:bg-[#EAE3D8] border border-[#EAE3D8] rounded-full w-6 h-6 flex items-center justify-center cursor-pointer text-[#3E3A35]"
+                                  >
+                                    <Plus size={13} />
+                                  </button>
+                                </form>
                               </motion.div>
                             )}
                           </AnimatePresence>
@@ -663,7 +826,7 @@ export const TasknowEvolution: React.FC = () => {
                   return (
                     <div 
                       key={`day-${day}`} 
-                      className="p-2 border border-[#F3EDE2] rounded-xl hover:bg-[#FDFBF7] cursor-pointer flex flex-col items-center justify-between min-h-[50px]"
+                      className="p-2 border border-[#F3EDE2] rounded-xl hover:bg-[#FDFBF7] cursor-pointer flex flex-col items-center justify-between min-h-[55px]"
                       onClick={() => {
                         if (dueTasks.length > 0) {
                           addToast(`${day}日の締切タスク: 『${dueTasks.map(t => t.title).join('』、『')}』`, 'info');
@@ -673,20 +836,14 @@ export const TasknowEvolution: React.FC = () => {
                       }}
                     >
                       <span className="font-semibold">{day}</span>
-                      {/* ドットの配置 */}
-                      <div className="flex gap-0.5 justify-center mt-1">
-                        {dueTasks.map(t => {
-                          const dotColor = 
-                            t.groupName === '大学の講義 🌿' ? 'bg-[#B5C7A3]' :
-                            t.groupName === 'サークル 📣' ? 'bg-[#E6A79A]' : 'bg-[#EED09D]';
-                          return (
-                            <span 
-                              key={t.id} 
-                              className={`w-1.5 h-1.5 rounded-full ${dotColor}`}
-                              title={t.title}
-                            />
-                          );
-                        })}
+                      <div className="flex gap-0.5 justify-center mt-1 flex-wrap">
+                        {dueTasks.map(t => (
+                          <span 
+                            key={t.id} 
+                            className="w-1.5 h-1.5 rounded-full bg-[#B5C7A3]"
+                            title={t.title}
+                          />
+                        ))}
                       </div>
                     </div>
                   );
@@ -719,7 +876,7 @@ export const TasknowEvolution: React.FC = () => {
         >
           <input 
             type="text"
-            placeholder={`${selectedGroup.slice(0, -2)}に関するタスクを入力... (送信でスライム大ジャンプ！)`}
+            placeholder={`${selectedGroup.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "").trim()}に関するタスクを入力...`}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             className="flex-1 border-none bg-transparent outline-none text-sm text-[#3E3A35] placeholder-[#8A7E72] py-2"
@@ -749,11 +906,9 @@ export const TasknowEvolution: React.FC = () => {
           animate={{
             left: [slimeAnim.startX, (slimeAnim.startX + slimeAnim.endX) / 2, slimeAnim.endX],
             top: [slimeAnim.startY, Math.min(slimeAnim.startY, slimeAnim.endY) - 180, slimeAnim.endY],
-            // 飛行中フワフワ揺れる/縦伸び/衝突時に横に潰れる
             scaleX: [1, 0.6, 1.4, 0.4, 1],
             scaleY: [1, 1.8, 0.7, 1.6, 1],
             opacity: [1, 1, 1, 0.9, 0],
-            // ユラユラ揺れる風船モーション
             rotate: [0, -8, 8, -4, 0]
           }}
           transition={{
@@ -766,6 +921,44 @@ export const TasknowEvolution: React.FC = () => {
           <span className="w-2.5 h-2.5 rounded-full bg-[#FFFFFF] opacity-80 animate-ping"></span>
           {slimeAnim.text}
         </motion.div>
+      )}
+
+      {/* --- 新規シェアルーム作成モーダル --- */}
+      {showCreateRoomModal && (
+        <div className="fixed inset-0 bg-[#000000] bg-opacity-40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
+          <div className="bg-[#FFFFFF] border border-[#EAE3D8] rounded-3xl p-6 w-full max-w-sm shadow-xl">
+            <h3 className="text-sm font-extrabold text-[#3E3A35] mb-4">新規シェアルーム作成</h3>
+            <form onSubmit={handleCreateRoomSubmit} className="flex flex-col gap-3">
+              <input 
+                type="text"
+                placeholder="ルーム名 (例: バイト、サークル)"
+                value={newRoomNameInput}
+                onChange={(e) => setNewRoomNameInput(e.target.value)}
+                className="bg-[#F3EDE2] border border-[#EAE3D8] rounded-xl px-4 py-2.5 text-xs outline-none text-[#3E3A35] w-full"
+                autoFocus
+                required
+              />
+              <div className="flex justify-end gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreateRoomModal(false);
+                    setNewRoomNameInput('');
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs bg-[#F3EDE2] hover:bg-[#EAE3D8] text-[#8A7E72] font-semibold transition-all"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl text-xs bg-[#B5C7A3] text-[#3E3A35] font-bold transition-all"
+                >
+                  作成
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* --- トースト通知オーバーレイ --- */}
@@ -789,13 +982,13 @@ export const TasknowEvolution: React.FC = () => {
         </AnimatePresence>
       </div>
 
-      {/* --- アニメーションCSSの定義 --- */}
+      {/* --- アタッチ時のバウンスCSS --- */}
       <style>{`
         @keyframes bounce-animation {
           0% { transform: scale(1); }
-          20% { transform: scale(1.25) rotate(-3deg); }
+          20% { transform: scale(1.2) rotate(-3deg); }
           45% { transform: scale(0.9) rotate(3deg); }
-          70% { transform: scale(1.08); }
+          70% { transform: scale(1.05); }
           100% { transform: scale(1); }
         }
         .slime-bounce-active {
