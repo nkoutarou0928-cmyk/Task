@@ -123,7 +123,7 @@ const AppInner: React.FC = () => {
                   backgroundColor: currentUser.theme_color
                 }}
               />
-              <span style={{ fontWeight: 600 }}>{currentUser.name}の進捗:</span>
+              <span style={{ fontWeight: 600 }}>{currentUser.name}全体の達成度 </span>
               <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, color: 'var(--accent-blue)' }}>
                 {overallProgress}%
               </span>
@@ -188,7 +188,7 @@ const AppInner: React.FC = () => {
               title="遅れをリセットして再計算"
             >
               <RefreshCw size={14} />
-              AIリスケジュール
+              AIにおまかせ調整 
             </button>
 
             {/* New Task Button */}
@@ -211,7 +211,7 @@ const AppInner: React.FC = () => {
               }}
             >
               <Plus size={14} />
-              新規タスク
+              タスクを追加 ＋
             </button>
           </div>
         </header>

@@ -474,7 +474,7 @@ export const TaskTree: React.FC = () => {
             borderRadius: '12px' 
           }}
         >
-          タスクがありません。「新規タスク」ボタンからタスクを追加してください。
+          タスクがありません。「タスクを追加 ＋」ボタンからタスクを追加してください。
         </div>
       ) : (
         rootTasks.map((task) => (
@@ -612,7 +612,7 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({ task, parentId, te
             color: 'var(--accent-blue)' 
           }}
         >
-          {isEditMode ? 'タスクの詳細編集' : '新規タスクの追加'}
+          {isEditMode ? 'タスクを編集する' : '新しいタスクを追加する'}
         </h3>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
