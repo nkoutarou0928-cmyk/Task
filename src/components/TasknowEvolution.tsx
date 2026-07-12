@@ -15,8 +15,7 @@ import {
   Plus,
   FolderPlus,
   Users,
-  CheckCircle2,
-  Circle
+  CheckCircle2
 } from 'lucide-react';
 
 // --- インターフェース定義 ---
