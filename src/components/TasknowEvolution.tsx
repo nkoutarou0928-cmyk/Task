@@ -56,7 +56,7 @@ interface Room {
 
 export const TasknowEvolution: React.FC = () => {
   // --- 状態管理 ---
-  // 初期タスクは完全にクリーンな空状態（Empty State）から開始
+  // 初期タスクリストは完全に空（Empty State）から開始
   const [tasks, setTasks] = useState<LargeTask[]>([]);
   
   const [activeTab, setActiveTab] = useState<'list' | 'calendar'>('list');
@@ -65,7 +65,7 @@ export const TasknowEvolution: React.FC = () => {
   
   // ボトムインプット状態
   const [inputText, setInputText] = useState('');
-  const [taskDeadline, setTaskDeadline] = useState<string>(''); // YYYY-MM-DD 入力値
+  const [taskDeadline, setTaskDeadline] = useState<string>(''); // YYYY-MM-DD 入力値（初期値は空）
 
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
 
@@ -80,19 +80,18 @@ export const TasknowEvolution: React.FC = () => {
   const [newGroupNameInput, setNewGroupNameInput] = useState('');
 
   // 動的シェアルームの管理
+  // 初期状態から特定の組織名・講義名を完全に排除し、「マイプレイス」としてプレースホルダー化
   const [rooms, setRooms] = useState<Room[]>([
-    { id: 'room-1', name: '大学生活 🏫' },
-    { id: 'room-2', name: '経済学共同課題 👥' }
+    { id: 'room-default', name: 'マイプレイス 🏠' }
   ]);
-  const [activeRoomId, setActiveRoomId] = useState<string>('room-1');
+  const [activeRoomId, setActiveRoomId] = useState<string>('room-default');
   const [showRoomDropdown, setShowRoomDropdown] = useState(false);
   const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
   const [newRoomNameInput, setNewRoomNameInput] = useState('');
 
   // ルーム別参加ユーザーの動的管理
   const [roomMembers, setRoomMembers] = useState<Record<string, string[]>>({
-    'room-1': ['自分 🙋‍♂️', 'アリス 👩', 'ボブ 👨'],
-    'room-2': ['自分 🙋‍♂️', 'チャーリー 🧑']
+    'room-default': ['自分 🙋‍♂️']
   });
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteNameInput, setInviteNameInput] = useState('');
@@ -305,17 +304,21 @@ export const TasknowEvolution: React.FC = () => {
     e.preventDefault();
     if (!inputText.trim()) return;
 
+    // バリデーションチェック（締切日の入力必須化）
+    if (!taskDeadline) {
+      addToast('締切日を設定してください 📅', 'warning');
+      return;
+    }
+
     // 現在のアクティブなグループをデフォルト分類先にする
     let targetGroup = selectedGroup;
     let estimatedMinutes = 60;
-    let daysToAdd = 1;
 
     // キーワード抽出による厳密な自動分類判定
     const cleanText = inputText.toLowerCase();
 
     // 1. カスタムグループ名の優先キーワード照合
     const matchedCustomGroup = groups.find(g => {
-      // 絵文字を除去したカスタム名の抽出
       const cleanGName = g.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "").trim().toLowerCase();
       return cleanGName && cleanText.includes(cleanGName);
     });
@@ -323,31 +326,25 @@ export const TasknowEvolution: React.FC = () => {
     if (matchedCustomGroup) {
       targetGroup = matchedCustomGroup;
       estimatedMinutes = 90;
-      daysToAdd = 2;
     } else {
       // 2. コア規定キーワードによるインテリジェント分類
       if (cleanText.includes('レポート') || cleanText.includes('講義') || cleanText.includes('テスト') || cleanText.includes('宿題') || cleanText.includes('ゼミ') || cleanText.includes('発表')) {
         const found = groups.find(g => g.includes('講義'));
         if (found) targetGroup = found;
         estimatedMinutes = 60;
-        daysToAdd = 1;
       } else if (cleanText.includes('ミーティング') || cleanText.includes('新歓') || cleanText.includes('イベント') || cleanText.includes('合宿') || cleanText.includes('部活') || cleanText.includes('サークル')) {
         const found = groups.find(g => g.includes('サークル'));
         if (found) targetGroup = found;
         estimatedMinutes = 120;
-        daysToAdd = 3;
       } else if (cleanText.includes('買い物') || cleanText.includes('バイト') || cleanText.includes('デート') || cleanText.includes('旅行') || cleanText.includes('カフェ')) {
         const found = groups.find(g => g.includes('プライベート'));
         if (found) targetGroup = found;
         estimatedMinutes = 45;
-        daysToAdd = 1;
       }
     }
 
-    // 締切期日設定（入力値があれば反映、無ければデフォルト）
-    const deadlineDate = taskDeadline 
-      ? new Date(`${taskDeadline}T18:00:00`)
-      : new Date(Date.now() + daysToAdd * 24 * 60 * 60 * 1000);
+    // 締切期日設定
+    const deadlineDate = new Date(`${taskDeadline}T18:00:00`);
 
     const onComplete = () => {
       const newTask: LargeTask = {
@@ -427,7 +424,6 @@ export const TasknowEvolution: React.FC = () => {
     addToast('シェアルームの共同タスク同期中...', 'info');
 
     setTimeout(() => {
-      // 最初の未完了の小タスクを完了に書き換える
       let simulatedTitle = '';
       setTasks(prev => prev.map(large => {
         if (large.id !== targetTask.id) return large;
@@ -492,9 +488,12 @@ export const TasknowEvolution: React.FC = () => {
 
   const activeRoom = rooms.find(r => r.id === activeRoomId) || rooms[0];
 
+  // バリデーションチェックによる送信可否の判定
+  const isSubmitDisabled = !inputText.trim() || !taskDeadline;
+
   return (
     <div className="min-h-screen bg-[#FDFBF7] text-[#3E3A35] font-sans pb-32 flex flex-col items-center">
-      {/* --- ヘッダー (極限ミニマル化) --- */}
+      {/* --- ヘッダー --- */}
       <header className="w-full max-w-4xl px-6 py-6 flex justify-between items-center border-b border-[#EAE3D8]">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-[#3E3A35]">
@@ -510,7 +509,7 @@ export const TasknowEvolution: React.FC = () => {
             {roomMembers[activeRoomId]?.map((member, idx) => (
               <div 
                 key={idx}
-                className="inline-block h-6 w-6 rounded-full ring-2 ring-[#FDFBF7] bg-[#B5C7A3] text-[9px] font-extrabold text-[#3E3A35] flex items-center justify-center cursor-help"
+                className="inline-block h-6 w-6 rounded-full ring-2 ring-[#FDFBF7] bg-[#B5C7A3] text-[9px] font-extrabold text-[#3E3A35] flex items-center justify-center cursor-help animate-fade-in"
                 title={member}
                 style={{ width: '25px', height: '25px' }}
               >
@@ -754,7 +753,7 @@ export const TasknowEvolution: React.FC = () => {
                                 <span className="font-extrabold text-[#3E3A35] text-base">{largeTask.title}</span>
                                 <div className="flex items-center gap-3 text-[10px] text-[#8A7E72] mt-1.5 flex-wrap">
                                   <span className="flex items-center gap-0.5"><Clock size={11} />想定: {largeTask.estimatedMinutes}分</span>
-                                  <span className="flex items-center gap-0.5 text-[#8BA6A9] font-semibold">
+                                  <span className="flex items-center gap-0.5 text-[#8BA6A9] font-bold">
                                     <DateIcon size={11} />
                                     締切: {new Date(largeTask.deadline).toLocaleDateString()} {new Date(largeTask.deadline).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                   </span>
@@ -934,7 +933,7 @@ export const TasknowEvolution: React.FC = () => {
         </div>
       </main>
 
-      {/* --- 固定最下部入力バー (📅 カレンダー締切設定ボタン統合) --- */}
+      {/* --- 固定最下部入力バー (📅 締切選択バリデーション必須化) --- */}
       <div 
         style={{
           position: 'fixed',
@@ -954,15 +953,20 @@ export const TasknowEvolution: React.FC = () => {
           id="slime-input-container"
           className="flex items-center bg-[#F3EDE2] border border-[#EAE3D8] rounded-full px-4 py-2 shadow-md pointer-events-auto w-full transition-all duration-300 hover:shadow-lg"
         >
-          {/* インライン日時指定ピッカー 📅 */}
-          <div className="flex items-center gap-1.5 bg-[#FFFFFF] border border-[#EAE3D8] hover:border-[#B5C7A3] rounded-full px-3 py-1.5 mr-2 text-[#8A7E72] transition-colors">
-            <DateIcon size={13} className="text-[#8A7E72]" />
+          {/* インライン締切指定ピッカー (未入力時は枠線がうっすら赤みを帯びてアピール) */}
+          <div 
+            className={`flex items-center gap-1.5 bg-[#FFFFFF] border rounded-full px-3 py-1.5 mr-2 text-[#8A7E72] transition-all ${
+              !taskDeadline ? 'border-[#E6A79A] bg-[#FFF8F7]' : 'border-[#EAE3D8] hover:border-[#B5C7A3]'
+            }`}
+          >
+            <DateIcon size={13} className={!taskDeadline ? 'text-[#E6A79A]' : 'text-[#8A7E72]'} />
             <input 
               type="date" 
               value={taskDeadline} 
               onChange={(e) => setTaskDeadline(e.target.value)} 
               className="bg-transparent border-none text-[10px] outline-none text-[#3E3A35] font-bold w-[95px] cursor-pointer"
-              title="タスクの締切日を設定"
+              title="締切日を選択してください（送信必須）"
+              required
             />
           </div>
 
@@ -974,10 +978,16 @@ export const TasknowEvolution: React.FC = () => {
             className="flex-1 border-none bg-transparent outline-none text-sm text-[#3E3A35] placeholder-[#8A7E72] py-2"
           />
 
+          {/* バリデーション連動型送信ボタン (締切未指定時は disabled & 不透明度低下) */}
           <button
             type="submit"
-            className="bg-[#B5C7A3] border-none text-[#3E3A35] w-9 h-9 rounded-full flex items-center justify-center cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95 shadow-sm"
-            title="送信して自動分類"
+            disabled={isSubmitDisabled}
+            className={`border-none w-9 h-9 rounded-full flex items-center justify-center cursor-pointer transition-all duration-200 shadow-sm ${
+              isSubmitDisabled 
+                ? 'bg-[#EAE3D8] text-[#B5A89E] opacity-50 cursor-not-allowed pointer-events-none' 
+                : 'bg-[#B5C7A3] text-[#3E3A35] hover:scale-105 active:scale-95'
+            }`}
+            title={isSubmitDisabled ? "タスク名と締切日を入力してください" : "送信して自動分類"}
           >
             <Send size={16} />
           </button>
@@ -1019,12 +1029,12 @@ export const TasknowEvolution: React.FC = () => {
       {/* --- 新規シェアルーム作成モーダル --- */}
       {showCreateRoomModal && (
         <div className="fixed inset-0 bg-[#000000] bg-opacity-40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
-          <div className="bg-[#FFFFFF] border border-[#EAE3D8] rounded-3xl p-6 w-full max-w-sm shadow-xl animate-fade-in">
+          <div className="bg-[#FFFFFF] border border-[#EAE3D8] rounded-3xl p-6 w-full max-w-sm shadow-xl">
             <h3 className="text-sm font-extrabold text-[#3E3A35] mb-4">新規シェアルーム作成</h3>
             <form onSubmit={handleCreateRoomSubmit} className="flex flex-col gap-3">
               <input 
                 type="text"
-                placeholder="ルーム名 (例: バイト、ゼミ課題)"
+                placeholder="ルーム名 (例: アルバイト、サークル課題)"
                 value={newRoomNameInput}
                 onChange={(e) => setNewRoomNameInput(e.target.value)}
                 className="bg-[#F3EDE2] border border-[#EAE3D8] rounded-xl px-4 py-2.5 text-xs outline-none text-[#3E3A35] w-full"
@@ -1057,12 +1067,12 @@ export const TasknowEvolution: React.FC = () => {
       {/* --- 他ユーザー招待（追加）モーダル --- */}
       {showInviteModal && (
         <div className="fixed inset-0 bg-[#000000] bg-opacity-40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
-          <div className="bg-[#FFFFFF] border border-[#EAE3D8] rounded-3xl p-6 w-full max-w-sm shadow-xl animate-fade-in">
+          <div className="bg-[#FFFFFF] border border-[#EAE3D8] rounded-3xl p-6 w-full max-w-sm shadow-xl">
             <h3 className="text-sm font-extrabold text-[#3E3A35] mb-4">メンバーを招待</h3>
             <form onSubmit={handleInviteSubmit} className="flex flex-col gap-3">
               <input 
                 type="text"
-                placeholder="招待するユーザー名 (例: キャロル 👩)"
+                placeholder="招待するユーザー名 (例: アリス 👩)"
                 value={inviteNameInput}
                 onChange={(e) => setInviteNameInput(e.target.value)}
                 className="bg-[#F3EDE2] border border-[#EAE3D8] rounded-xl px-4 py-2.5 text-xs outline-none text-[#3E3A35] w-full"
