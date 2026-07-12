@@ -53,6 +53,35 @@ interface Room {
   name: string;
 }
 
+// --- カスタムチェックボックスコンポーネント (丸型 & セージグリーン) ---
+const TaskCheckbox: React.FC<{
+  checked: boolean;
+  onChange: () => void;
+  disabled?: boolean;
+}> = ({ checked, onChange, disabled = false }) => {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!disabled) onChange();
+      }}
+      disabled={disabled}
+      className={`w-5 h-5 rounded-full border flex items-center justify-center cursor-pointer transition-all duration-300 ${
+        checked 
+          ? 'bg-[#B5C7A3] border-[#B5C7A3] text-[#3E3A35]' 
+          : 'bg-transparent border-[#EAE3D8] hover:border-[#B5C7A3]'
+      } ${disabled ? 'opacity-70 cursor-not-allowed' : ''}`}
+    >
+      {checked && (
+        <svg className="w-3.5 h-3.5 stroke-current" fill="none" viewBox="0 0 24 24" strokeWidth="4">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      )}
+    </button>
+  );
+};
+
 export const TasknowEvolution: React.FC = () => {
   // --- 状態管理 (初期ステートは完全に空からスタート) ---
   const [tasks, setTasks] = useState<LargeTask[]>([]);
@@ -83,6 +112,13 @@ export const TasknowEvolution: React.FC = () => {
   const [roomMembers, setRoomMembers] = useState<Record<string, string[]>>({});
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteNameInput, setInviteNameInput] = useState('');
+
+  // 2段階削除確認用のアクティブターゲット
+  const [deleteTarget, setDeleteTarget] = useState<{
+    type: 'group' | 'room';
+    id: string; // 対象の識別子
+    name: string; // 表示用の名前
+  } | null>(null);
 
   // インラインの中・小タスク追加用テキスト入力バッファ
   const [newMediumInputs, setNewMediumInputs] = useState<Record<string, string>>({});
@@ -132,7 +168,7 @@ export const TasknowEvolution: React.FC = () => {
     }, 3500);
   };
 
-  // 小タスク完了トグル
+  // 小タスク完了トグル (チェックマーク＆打ち消し連動)
   const handleSmallTaskToggle = (largeId: string, mediumId: string, smallId: string) => {
     setTasks(prev => prev.map(large => {
       if (large.id !== largeId) return large;
@@ -151,6 +187,38 @@ export const TasknowEvolution: React.FC = () => {
       });
 
       return calculateProgress({ ...large, subtasks: updatedSubtasks });
+    }));
+  };
+
+  // 中タスク（サブタスクを持たない場合）の完了トグル
+  const handleMediumTaskToggle = (largeId: string, mediumId: string) => {
+    setTasks(prev => prev.map(large => {
+      if (large.id !== largeId) return large;
+      
+      const updatedSubtasks = large.subtasks.map(medium => {
+        if (medium.id !== mediumId) return medium;
+        // 子タスクがある場合はトグル不可
+        if (medium.subtasks.length > 0) return medium;
+        
+        const nextRate = medium.progressRate < 100 ? 100 : 0;
+        addToast(`ステップ『${medium.title}』を${nextRate === 100 ? '完了' : '未完了'}にしました`, 'info');
+        return { ...medium, progressRate: nextRate };
+      });
+
+      return calculateProgress({ ...large, subtasks: updatedSubtasks });
+    }));
+  };
+
+  // 大タスク（サブタスクを持たない場合）の完了トグル
+  const handleLargeTaskToggle = (largeId: string) => {
+    setTasks(prev => prev.map(large => {
+      if (large.id !== largeId) return large;
+      // 子タスクがある場合はトグル不可
+      if (large.subtasks.length > 0) return large;
+      
+      const nextRate = large.progressRate < 100 ? 100 : 0;
+      addToast(`タスク『${large.title}』を${nextRate === 100 ? '完了' : '未完了'}にしました`, 'info');
+      return { ...large, progressRate: nextRate };
     }));
   };
 
@@ -204,7 +272,8 @@ export const TasknowEvolution: React.FC = () => {
         progressRate: 0,
         subtasks: []
       };
-      return calculateProgress({ ...t, subtasks: [...t.subtasks, newMedium] });
+      // 中タスクが追加されたら、大タスクの100%完了を解除して動的に計算状態に戻す
+      return calculateProgress({ ...t, progressRate: 0, subtasks: [...t.subtasks, newMedium] });
     }));
 
     setNewMediumInputs(prev => ({ ...prev, [largeId]: '' }));
@@ -225,7 +294,8 @@ export const TasknowEvolution: React.FC = () => {
           title: inputTitle.trim(),
           completed: false
         };
-        return { ...m, subtasks: [...m.subtasks, newSmall] };
+        // 小タスク追加に伴い、中タスクの100%完了を解除して動的計算にする
+        return { ...m, progressRate: 0, subtasks: [...m.subtasks, newSmall] };
       });
       return calculateProgress({ ...t, subtasks: updatedSubtasks });
     }));
@@ -234,7 +304,7 @@ export const TasknowEvolution: React.FC = () => {
     addToast(`作業項目『${inputTitle}』を追加しました`, 'success');
   };
 
-  // --- 動的グループの追加・削除 ---
+  // --- 動的グループの追加・確認付き削除 ---
   const handleAddGroupSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newGroupNameInput.trim()) return;
@@ -252,25 +322,24 @@ export const TasknowEvolution: React.FC = () => {
     addToast(`グループ『${formattedName}』を作成しました！`, 'success');
   };
 
-  const handleDeleteGroup = (groupNameToDelete: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // グループ選択のクリックイベント伝播を防止
-    
-    // グループ削除
+  // 1回目のクリックで確認ダイアログを開く
+  const handleGroupDeleteClick = (groupName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeleteTarget({ type: 'group', id: groupName, name: groupName });
+  };
+
+  const executeDeleteGroup = (groupNameToDelete: string) => {
     setGroups(prev => prev.filter(g => g !== groupNameToDelete));
-    
-    // 削除されたグループに紐づいていたタスクも同時に削除
     setTasks(prev => prev.filter(t => t.groupName !== groupNameToDelete));
     
-    // アクティブなグループが削除された場合、選択状態をリセット
     if (selectedGroup === groupNameToDelete) {
       const remainingGroups = groups.filter(g => g !== groupNameToDelete);
       setSelectedGroup(remainingGroups.length > 0 ? remainingGroups[0] : '');
     }
-    
     addToast(`グループ『${groupNameToDelete}』と紐づくタスクを削除しました`, 'warning');
   };
 
-  // --- 動的シェアルームの追加・削除 ---
+  // --- 動的シェアルームの追加・確認付き削除 ---
   const handleCreateRoomSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newRoomNameInput.trim()) return;
@@ -289,31 +358,29 @@ export const TasknowEvolution: React.FC = () => {
     addToast(`シェアルーム『${newRoom.name}』を作成しました！`, 'success');
   };
 
-  const handleDeleteRoom = (roomToDelete: Room, e: React.MouseEvent) => {
-    e.stopPropagation(); // ドロップダウンクリックイベント伝播防止
+  const handleRoomDeleteClick = (room: Room, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeleteTarget({ type: 'room', id: room.id, name: room.name });
+  };
 
-    // ルーム削除
-    setRooms(prev => prev.filter(r => r.id !== roomToDelete.id));
-
-    // ルーム内のすべてのタスクと所属メンバーをクリア
-    setTasks(prev => prev.filter(t => t.roomId !== roomToDelete.id));
+  const executeDeleteRoom = (roomIdToDelete: string) => {
+    setRooms(prev => prev.filter(r => r.id !== roomIdToDelete));
+    setTasks(prev => prev.filter(t => t.roomId !== roomIdToDelete));
     setRoomMembers(prev => {
       const updated = { ...prev };
-      delete updated[roomToDelete.id];
+      delete updated[roomIdToDelete];
       return updated;
     });
 
-    // 削除されたルームがアクティブだった場合、切り替える
-    if (activeRoomId === roomToDelete.id) {
-      const remainingRooms = rooms.filter(r => r.id !== roomToDelete.id);
+    if (activeRoomId === roomIdToDelete) {
+      const remainingRooms = rooms.filter(r => r.id !== roomIdToDelete);
       if (remainingRooms.length > 0) {
         setActiveRoomId(remainingRooms[0].id);
       } else {
         setActiveRoomId('');
       }
     }
-
-    addToast(`ルーム『${roomToDelete.name}』と全データを削除しました`, 'warning');
+    addToast(`ルームを削除しました`, 'warning');
   };
 
   // --- メンバー招待 ---
@@ -328,7 +395,7 @@ export const TasknowEvolution: React.FC = () => {
     }));
 
     addToast(`『${newMember}』を招待しました！`, 'success');
-    setInviteNameInput('');
+    inviteNameInput && setInviteNameInput('');
     setShowInviteModal(false);
   };
 
@@ -337,13 +404,12 @@ export const TasknowEvolution: React.FC = () => {
     e.preventDefault();
     if (!inputText.trim()) return;
 
-    // バリデーションチェック（締切必須）
+    // 締切必須バリデーション
     if (!taskDeadline) {
       addToast('締切日を設定してください 📅', 'warning');
       return;
     }
 
-    // 現在のアクティブなグループがない場合は送信不可
     if (!selectedGroup) {
       addToast('グループを先に作成してください', 'warning');
       return;
@@ -516,8 +582,6 @@ export const TasknowEvolution: React.FC = () => {
   };
 
   const activeRoom = rooms.find(r => r.id === activeRoomId);
-
-  // ルームとグループ両方が揃っている場合のみ送信可能
   const isSubmitDisabled = !inputText.trim() || !taskDeadline || !activeRoomId || !selectedGroup;
 
   return (
@@ -591,7 +655,7 @@ export const TasknowEvolution: React.FC = () => {
                         {room.name}
                       </button>
                       <button
-                        onClick={(e) => handleDeleteRoom(room, e)}
+                        onClick={(e) => handleRoomDeleteClick(room, e)}
                         className="text-[#E6A79A] hover:text-[#FF4D4D] p-1 border-none bg-transparent cursor-pointer"
                         title="ルームを削除"
                       >
@@ -685,7 +749,7 @@ export const TasknowEvolution: React.FC = () => {
           )}
         </div>
 
-        {/* --- グループフォルダ・カプセルバッジ (動的追加・削除) --- */}
+        {/* --- グループフォルダ・カプセルバッジ --- */}
         <div className="flex flex-wrap justify-center items-center gap-3 mb-6">
           {groups.map(group => {
             const isActive = selectedGroup === group;
@@ -710,9 +774,9 @@ export const TasknowEvolution: React.FC = () => {
                   </span>
                 </button>
                 
-                {/* グループ削除ボタン */}
+                {/* グループ削除確認を挟む */}
                 <button
-                  onClick={(e) => handleDeleteGroup(group, e)}
+                  onClick={(e) => handleGroupDeleteClick(group, e)}
                   className="text-xs text-[#E6A79A] hover:text-[#FF4D4D] border-none bg-transparent cursor-pointer p-0.5 ml-0.5 flex items-center justify-center font-bold"
                   title="グループを削除"
                 >
@@ -790,6 +854,7 @@ export const TasknowEvolution: React.FC = () => {
                 ) : (
                   getFilteredAndSortedTasks().map(largeTask => {
                     const expanded = !!expandedTasks[largeTask.id];
+                    const isLargeCompleted = largeTask.progressRate === 100;
                     return (
                       <div key={largeTask.id} className="relative overflow-hidden rounded-3xl animate-fade-in">
                         {/* スワイプ削除インジケータ */}
@@ -816,24 +881,46 @@ export const TasknowEvolution: React.FC = () => {
                         >
                           {/* 大タスクヘッダー */}
                           <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3 flex-1" onClick={() => toggleExpand(largeTask.id)}>
-                              <div className="text-[#8A7E72]">
-                                {expanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
-                              </div>
+                            <div className="flex items-center gap-3 flex-1">
+                              
+                              {/* 1. 完了チェックボックス (子タスクがある場合は表示・クリック制御) */}
+                              <TaskCheckbox 
+                                checked={isLargeCompleted}
+                                onChange={() => handleLargeTaskToggle(largeTask.id)}
+                                disabled={largeTask.subtasks.length > 0} // 子タスクがある場合は自動連動のため disabled
+                              />
 
-                              <div className="flex flex-col">
-                                <span className="font-extrabold text-[#3E3A35] text-base">{largeTask.title}</span>
-                                <div className="flex items-center gap-3 text-[10px] text-[#8A7E72] mt-1.5 flex-wrap">
-                                  <span className="flex items-center gap-0.5"><Clock size={11} />想定: {largeTask.estimatedMinutes}分</span>
-                                  <span className="flex items-center gap-0.5 text-[#8BA6A9] font-bold">
-                                    <DateIcon size={11} />
-                                    締切: {new Date(largeTask.deadline).toLocaleDateString()} {new Date(largeTask.deadline).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                              {/* 2. 展開用トグル領域 */}
+                              <div className="flex items-center gap-2 flex-1" onClick={() => toggleExpand(largeTask.id)}>
+                                <div className="text-[#8A7E72]">
+                                  {largeTask.subtasks.length > 0 ? (
+                                    expanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />
+                                  ) : (
+                                    <div className="w-5" />
+                                  )}
+                                </div>
+
+                                <div className="flex flex-col">
+                                  {/* 完了時にセージグリーン染め、打ち消し線、opacity-50演出 */}
+                                  <span className={`font-extrabold text-base transition-all duration-300 ${
+                                    isLargeCompleted 
+                                      ? 'line-through text-[#B5C7A3] opacity-50' 
+                                      : 'text-[#3E3A35]'
+                                  }`}>
+                                    {largeTask.title}
                                   </span>
+                                  <div className="flex items-center gap-3 text-[10px] text-[#8A7E72] mt-1.5 flex-wrap">
+                                    <span className="flex items-center gap-0.5"><Clock size={11} />想定: {largeTask.estimatedMinutes}分</span>
+                                    <span className="flex items-center gap-0.5 text-[#8BA6A9] font-bold">
+                                      <DateIcon size={11} />
+                                      締切: {new Date(largeTask.deadline).toLocaleDateString()} {new Date(largeTask.deadline).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
                             </div>
 
-                            {/* 進捗円形バー */}
+                            {/* 円形ゲージ ＆ AIスコア */}
                             <div className="flex items-center gap-3">
                               {aiSortActive && (
                                 <div className="bg-[#F3EDE2] text-[#3E3A35] border border-[#EAE3D8] text-[10px] font-extrabold px-2 py-1 rounded-md">
@@ -862,7 +949,7 @@ export const TasknowEvolution: React.FC = () => {
 
                           {/* 3階層アコーディオン */}
                           <AnimatePresence initial={false}>
-                            {expanded && (
+                            {expanded && largeTask.subtasks.length > 0 && (
                               <motion.div
                                 initial={{ height: 0, opacity: 0 }}
                                 animate={{ height: 'auto', opacity: 1 }}
@@ -871,65 +958,88 @@ export const TasknowEvolution: React.FC = () => {
                                 className="overflow-hidden border-t border-[#F3EDE2] pt-4 flex flex-col gap-4"
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                {largeTask.subtasks.map(mediumTask => (
-                                  <div key={mediumTask.id} className="bg-[#FDFBF7] p-4 rounded-2xl border border-[#EAE3D8] flex flex-col gap-3 animate-fade-in">
-                                    <div className="flex justify-between items-center">
-                                      <span className="text-xs font-bold text-[#3E3A35]">【中】{mediumTask.title}</span>
-                                      <span className="text-[10px] bg-[#EAE3D8] px-2 py-0.5 rounded-full font-bold">
-                                        進捗: {mediumTask.progressRate}%
-                                      </span>
-                                    </div>
-
-                                    {/* 中タスク進捗バー */}
-                                    <div className="w-full bg-[#F3EDE2] h-1 rounded-full overflow-hidden">
-                                      <div 
-                                        className="bg-[#B5C7A3] h-full transition-all duration-500 ease-out" 
-                                        style={{ width: `${mediumTask.progressRate}%` }}
-                                      />
-                                    </div>
-
-                                    {/* 小タスク項目リスト */}
-                                    <div className="flex flex-col gap-2 pl-2">
-                                      {mediumTask.subtasks.map(smallTask => (
-                                        <label 
-                                          key={smallTask.id} 
-                                          className="flex items-center gap-2.5 text-xs text-[#8A7E72] hover:text-[#3E3A35] transition-colors cursor-pointer"
-                                        >
-                                          <input 
-                                            type="checkbox"
-                                            checked={smallTask.completed}
-                                            onChange={() => handleSmallTaskToggle(largeTask.id, mediumTask.id, smallTask.id)}
-                                            className="w-4 h-4 cursor-pointer accent-[#B5C7A3]"
+                                {largeTask.subtasks.map(mediumTask => {
+                                  const isMediumCompleted = mediumTask.progressRate === 100;
+                                  return (
+                                    <div key={mediumTask.id} className="bg-[#FDFBF7] p-4 rounded-2xl border border-[#EAE3D8] flex flex-col gap-3 animate-fade-in">
+                                      <div className="flex justify-between items-center gap-2">
+                                        <div className="flex items-center gap-2.5">
+                                          {/* 中タスクのチェックボックス */}
+                                          <TaskCheckbox 
+                                            checked={isMediumCompleted}
+                                            onChange={() => handleMediumTaskToggle(largeTask.id, mediumTask.id)}
+                                            disabled={mediumTask.subtasks.length > 0}
                                           />
-                                          <span className={smallTask.completed ? 'line-through opacity-60' : ''}>
-                                            {smallTask.title}
+                                          {/* 完了演出 */}
+                                          <span className={`text-xs font-bold transition-all duration-300 ${
+                                            isMediumCompleted 
+                                              ? 'line-through text-[#B5C7A3] opacity-50' 
+                                              : 'text-[#3E3A35]'
+                                          }`}>
+                                            【中】{mediumTask.title}
                                           </span>
-                                        </label>
-                                      ))}
-                                    </div>
+                                        </div>
+                                        <span className="text-[10px] bg-[#EAE3D8] px-2 py-0.5 rounded-full font-bold">
+                                          進捗: {mediumTask.progressRate}%
+                                        </span>
+                                      </div>
 
-                                    {/* 小タスクインライン追加 */}
-                                    <form 
-                                      onSubmit={(e) => handleAddSmallTask(largeTask.id, mediumTask.id, e)}
-                                      className="flex items-center gap-1.5 border-t border-[#F3EDE2] pt-2 mt-1"
-                                    >
-                                      <input 
-                                        type="text" 
-                                        placeholder="小タスク (作業項目) を追加..."
-                                        value={newSmallInputs[mediumTask.id] || ''}
-                                        onChange={(e) => setNewSmallInputs(prev => ({ ...prev, [mediumTask.id]: e.target.value }))}
-                                        className="flex-1 bg-transparent border-none text-[11px] outline-none py-1 placeholder-[#B5A89E] text-[#3E3A35]"
-                                      />
-                                      <button 
-                                        type="submit" 
-                                        className="bg-transparent border-none text-[#8BA6A9] cursor-pointer"
-                                        title="小タスクを追加"
+                                      {/* 中タスク進捗バー */}
+                                      <div className="w-full bg-[#F3EDE2] h-1 rounded-full overflow-hidden">
+                                        <div 
+                                          className="bg-[#B5C7A3] h-full transition-all duration-500 ease-out" 
+                                          style={{ width: `${mediumTask.progressRate}%` }}
+                                        />
+                                      </div>
+
+                                      {/* 小タスク項目リスト */}
+                                      <div className="flex flex-col gap-2 pl-2">
+                                        {mediumTask.subtasks.map(smallTask => (
+                                          <label 
+                                            key={smallTask.id} 
+                                            className="flex items-center gap-2.5 text-xs text-[#8A7E72] hover:text-[#3E3A35] transition-colors cursor-pointer"
+                                          >
+                                            <input 
+                                              type="checkbox"
+                                              checked={smallTask.completed}
+                                              onChange={() => handleSmallTaskToggle(largeTask.id, mediumTask.id, smallTask.id)}
+                                              className="w-4 h-4 cursor-pointer accent-[#B5C7A3]"
+                                            />
+                                            {/* 小タスク完了演出 */}
+                                            <span className={`transition-all duration-300 ${
+                                              smallTask.completed 
+                                                ? 'line-through text-[#B5C7A3] opacity-50' 
+                                                : 'text-[#3E3A35]'
+                                            }`}>
+                                              {smallTask.title}
+                                            </span>
+                                          </label>
+                                        ))}
+                                      </div>
+
+                                      {/* 小タスクインライン追加 */}
+                                      <form 
+                                        onSubmit={(e) => handleAddSmallTask(largeTask.id, mediumTask.id, e)}
+                                        className="flex items-center gap-1.5 border-t border-[#F3EDE2] pt-2 mt-1"
                                       >
-                                        <Plus size={14} />
-                                      </button>
-                                    </form>
-                                  </div>
-                                ))}
+                                        <input 
+                                          type="text" 
+                                          placeholder="小タスク (作業項目) を追加..."
+                                          value={newSmallInputs[mediumTask.id] || ''}
+                                          onChange={(e) => setNewSmallInputs(prev => ({ ...prev, [mediumTask.id]: e.target.value }))}
+                                          className="flex-1 bg-transparent border-none text-[11px] outline-none py-1 placeholder-[#B5A89E] text-[#3E3A35]"
+                                        />
+                                        <button 
+                                          type="submit" 
+                                          className="bg-transparent border-none text-[#8BA6A9] cursor-pointer"
+                                          title="小タスクを追加"
+                                        >
+                                          <Plus size={14} />
+                                        </button>
+                                      </form>
+                                    </div>
+                                  );
+                                })}
 
                                 {/* 中タスクインライン追加 */}
                                 <form 
@@ -1005,7 +1115,7 @@ export const TasknowEvolution: React.FC = () => {
         </div>
       </main>
 
-      {/* --- 固定最下部入力バー (バリデーション強化) --- */}
+      {/* --- 固定最下部入力バー --- */}
       <div 
         style={{
           position: 'fixed',
@@ -1112,7 +1222,7 @@ export const TasknowEvolution: React.FC = () => {
             <form onSubmit={handleCreateRoomSubmit} className="flex flex-col gap-3">
               <input 
                 type="text"
-                placeholder="ルーム名 (例: 就活グループ、ゼミ発表)"
+                placeholder="ルーム名 (例: アルバイト、サークル課題)"
                 value={newRoomNameInput}
                 onChange={(e) => setNewRoomNameInput(e.target.value)}
                 className="bg-[#F3EDE2] border border-[#EAE3D8] rounded-xl px-4 py-2.5 text-xs outline-none text-[#3E3A35] w-full"
@@ -1176,6 +1286,49 @@ export const TasknowEvolution: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- 2段階削除確認ダイアログ (ダブルチェック) --- */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-[#000000] bg-opacity-40 backdrop-blur-sm flex flex-col items-center justify-center z-[2000] p-4">
+          <div className="bg-[#FFFFFF] border border-[#EAE3D8] rounded-3xl p-6 w-full max-w-sm shadow-xl animate-fade-in">
+            <div className="flex items-center gap-2.5 text-[#E6A79A] mb-3">
+              <Trash2 size={20} />
+              <h3 className="text-sm font-extrabold text-[#3E3A35]">
+                本当に削除しますか？
+              </h3>
+            </div>
+            <p className="text-xs text-[#8A7E72] leading-relaxed mb-4">
+              {deleteTarget.type === 'group' 
+                ? `グループ『${deleteTarget.name}』を削除すると、このグループに属するすべてのタスクが同時に削除されます。この操作は元に戻せません。`
+                : `ルーム『${deleteTarget.name}』を削除すると、このルームに登録されているすべてのタスク、招待したメンバー、グループ関係データが完全にクリアされます。この操作は元に戻せません。`
+              }
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 rounded-xl text-xs bg-[#F3EDE2] hover:bg-[#EAE3D8] text-[#8A7E72] font-semibold transition-all"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (deleteTarget.type === 'group') {
+                    executeDeleteGroup(deleteTarget.id);
+                  } else {
+                    executeDeleteRoom(deleteTarget.id);
+                  }
+                  setDeleteTarget(null);
+                }}
+                className="px-4 py-2 rounded-xl text-xs bg-[#E6A79A] text-[#3E3A35] font-bold hover:bg-opacity-95 transition-all"
+              >
+                本当に削除する ⚠️
+              </button>
+            </div>
           </div>
         </div>
       )}
