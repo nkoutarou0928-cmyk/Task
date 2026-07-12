@@ -222,7 +222,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ selectedGroup }) =
                       index={index}
                       isDragDisabled={sortMode === 'ai'}
                     >
-                      {(provided, snapshot) => (
+                      {(provided) => (
                         <div
                           ref={provided.innerRef}
                           {...provided.draggableProps}

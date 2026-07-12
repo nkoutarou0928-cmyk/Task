@@ -320,7 +320,6 @@ const AppInner: React.FC = () => {
                 id={`group-badge-${group}`}
                 onClick={() => setSelectedGroupFilter(group)}
                 style={{
-                  border: 'none',
                   padding: '10px 22px',
                   borderRadius: '9999px',
                   background: isActive ? 'var(--accent-green)' : 'var(--bg-card-hover)',
