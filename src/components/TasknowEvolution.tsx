@@ -131,7 +131,7 @@ export const TasknowEvolution: React.FC = () => {
   const [syncing, setSyncing] = useState(false);
 
   // 30秒自動消滅用のタイマー管理 Ref
-  const runningTimers = useRef<Record<string, NodeJS.Timeout>>({});
+  const runningTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // --- ヘルパー関数 ---
   // 進捗率の自動再計算 (小 ➔ 中 ➔ 大の完全階層連動)
