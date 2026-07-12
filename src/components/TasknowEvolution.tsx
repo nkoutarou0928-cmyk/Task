@@ -17,29 +17,18 @@ import {
   Users
 } from 'lucide-react';
 
-// --- インターフェース定義 ---
-interface SmallTask {
+// --- インターフェース定義 (完全な親子階層構造型) ---
+interface TaskNode {
   id: string;
+  roomId?: string; // LARGE のみ保持
   title: string;
-  completed: boolean;
-}
-
-interface MediumTask {
-  id: string;
-  title: string;
-  progressRate: number; // 下位の小タスクから自動計算
-  subtasks: SmallTask[];
-}
-
-interface LargeTask {
-  id: string;
-  roomId: string; // 紐づくシェアルームのID
-  title: string;
-  progressRate: number; // 下位の中タスクの平均値から自動計算
-  estimatedMinutes: number;
-  deadline: string; // ISO String
-  groupName: string; // 動的グループ名
-  subtasks: MediumTask[];
+  type: 'LARGE' | 'MEDIUM' | 'SMALL';
+  isCompleted: boolean;
+  progressRate: number; // LARGE と MEDIUM は下位から自動計算
+  estimatedMinutes?: number; // LARGE のみ保持
+  deadline?: string; // LARGE のみ保持 (ISO String)
+  groupName?: string; // LARGE のみ保持
+  children: TaskNode[]; // 下位の階層ノードを保持 (LARGE ➔ MEDIUM ➔ SMALL)
 }
 
 interface Toast {
@@ -84,7 +73,7 @@ const TaskCheckbox: React.FC<{
 
 export const TasknowEvolution: React.FC = () => {
   // --- 状態管理 (初期ステートは完全に空からスタート) ---
-  const [tasks, setTasks] = useState<LargeTask[]>([]);
+  const [tasks, setTasks] = useState<TaskNode[]>([]);
   const [activeTab, setActiveTab] = useState<'list' | 'calendar'>('list');
   const [aiSortActive, setAiSortActive] = useState(false);
   const [simulatedTime] = useState<Date>(new Date());
@@ -95,13 +84,13 @@ export const TasknowEvolution: React.FC = () => {
 
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
 
-  // 動的グループの管理 (初期値は完全に空)
-  const [groups, setGroups] = useState<string[]>([]);
+  // ルームごとのグループ（リスト）分離管理ステート
+  const [roomGroups, setRoomGroups] = useState<Record<string, string[]>>({});
   const [selectedGroup, setSelectedGroup] = useState<string>('');
   const [showAddGroupInput, setShowAddGroupInput] = useState(false);
   const [newGroupNameInput, setNewGroupNameInput] = useState('');
 
-  // 動的シェアルームの管理 (初期値は完全に空)
+  // 動的シェアルームの管理 (起動時は空)
   const [rooms, setRooms] = useState<Room[]>([]);
   const [activeRoomId, setActiveRoomId] = useState<string>('');
   const [showRoomDropdown, setShowRoomDropdown] = useState(false);
@@ -142,21 +131,43 @@ export const TasknowEvolution: React.FC = () => {
   const [syncing, setSyncing] = useState(false);
 
   // --- ヘルパー関数 ---
-  // 進捗率の自動再計算 (小 ➔ 中 ➔ 大の連動)
-  function calculateProgress(largeTask: LargeTask): LargeTask {
-    const updatedMediums = largeTask.subtasks.map(medium => {
-      const total = medium.subtasks.length;
-      const completed = medium.subtasks.filter(s => s.completed).length;
-      const progressRate = total > 0 ? Math.round((completed / total) * 100) : 0;
-      return { ...medium, progressRate };
-    });
+  // 進捗率の自動再計算 (小 ➔ 中 ➔ 大の完全階層連動)
+  function calculateProgress(node: TaskNode): TaskNode {
+    if (node.type === 'SMALL') {
+      return {
+        ...node,
+        progressRate: node.isCompleted ? 100 : 0
+      };
+    }
 
-    const totalMediumProgress = updatedMediums.reduce((sum, m) => sum + m.progressRate, 0);
-    const progressRate = updatedMediums.length > 0 
-      ? Math.round(totalMediumProgress / updatedMediums.length) 
-      : 0;
+    // 下位階層の子タスクを再帰的に更新
+    const updatedChildren = node.children.map(calculateProgress);
 
-    return { ...largeTask, progressRate, subtasks: updatedMediums };
+    let progressRate = 0;
+    let isCompleted = false;
+
+    if (updatedChildren.length > 0) {
+      if (node.type === 'MEDIUM') {
+        const completedCount = updatedChildren.filter(c => c.isCompleted).length;
+        progressRate = Math.round((completedCount / updatedChildren.length) * 100);
+        isCompleted = progressRate === 100;
+      } else if (node.type === 'LARGE') {
+        const totalProgress = updatedChildren.reduce((sum, child) => sum + child.progressRate, 0);
+        progressRate = Math.round(totalProgress / updatedChildren.length);
+        isCompleted = progressRate === 100;
+      }
+    } else {
+      // 子ノードを持たない葉（Leaf）ノードの場合
+      isCompleted = node.isCompleted;
+      progressRate = isCompleted ? 100 : 0;
+    }
+
+    return {
+      ...node,
+      progressRate,
+      isCompleted,
+      children: updatedChildren
+    };
   }
 
   // トースト通知追加
@@ -168,25 +179,25 @@ export const TasknowEvolution: React.FC = () => {
     }, 3500);
   };
 
-  // 小タスク完了トグル (チェックマーク＆打ち消し連動)
+  // 小タスク完了トグル
   const handleSmallTaskToggle = (largeId: string, mediumId: string, smallId: string) => {
     setTasks(prev => prev.map(large => {
       if (large.id !== largeId) return large;
       
-      const updatedSubtasks = large.subtasks.map(medium => {
+      const updatedChildren = large.children.map(medium => {
         if (medium.id !== mediumId) return medium;
         
-        const updatedSmalls = medium.subtasks.map(small => {
+        const updatedSmalls = medium.children.map(small => {
           if (small.id !== smallId) return small;
-          const nextState = !small.completed;
+          const nextState = !small.isCompleted;
           addToast(`『${small.title}』を${nextState ? '完了' : '未完了'}にしました`, 'info');
-          return { ...small, completed: nextState };
+          return { ...small, isCompleted: nextState };
         });
         
-        return { ...medium, subtasks: updatedSmalls };
+        return { ...medium, children: updatedSmalls };
       });
 
-      return calculateProgress({ ...large, subtasks: updatedSubtasks });
+      return calculateProgress({ ...large, children: updatedChildren });
     }));
   };
 
@@ -195,17 +206,17 @@ export const TasknowEvolution: React.FC = () => {
     setTasks(prev => prev.map(large => {
       if (large.id !== largeId) return large;
       
-      const updatedSubtasks = large.subtasks.map(medium => {
+      const updatedChildren = large.children.map(medium => {
         if (medium.id !== mediumId) return medium;
         // 子タスクがある場合はトグル不可
-        if (medium.subtasks.length > 0) return medium;
+        if (medium.children.length > 0) return medium;
         
-        const nextRate = medium.progressRate < 100 ? 100 : 0;
-        addToast(`ステップ『${medium.title}』を${nextRate === 100 ? '完了' : '未完了'}にしました`, 'info');
-        return { ...medium, progressRate: nextRate };
+        const nextState = !medium.isCompleted;
+        addToast(`ステップ『${medium.title}』を${nextState ? '完了' : '未完了'}にしました`, 'info');
+        return { ...medium, isCompleted: nextState };
       });
 
-      return calculateProgress({ ...large, subtasks: updatedSubtasks });
+      return calculateProgress({ ...large, children: updatedChildren });
     }));
   };
 
@@ -214,11 +225,11 @@ export const TasknowEvolution: React.FC = () => {
     setTasks(prev => prev.map(large => {
       if (large.id !== largeId) return large;
       // 子タスクがある場合はトグル不可
-      if (large.subtasks.length > 0) return large;
+      if (large.children.length > 0) return large;
       
-      const nextRate = large.progressRate < 100 ? 100 : 0;
-      addToast(`タスク『${large.title}』を${nextRate === 100 ? '完了' : '未完了'}にしました`, 'info');
-      return { ...large, progressRate: nextRate };
+      const nextState = !large.isCompleted;
+      addToast(`タスク『${large.title}』を${nextState ? '完了' : '未完了'}にしました`, 'info');
+      return { ...large, isCompleted: nextState };
     }));
   };
 
@@ -228,14 +239,19 @@ export const TasknowEvolution: React.FC = () => {
   };
 
   // AI流動的優先度スコア計算式
-  const getPriorityScore = (task: LargeTask) => {
-    const deadlineDate = new Date(task.deadline);
+  const getPriorityScore = (task: TaskNode) => {
+    const deadlineStr = task.deadline || new Date().toISOString();
+    const deadlineDate = new Date(deadlineStr);
     const remainingMs = deadlineDate.getTime() - simulatedTime.getTime();
     const remainingHours = Math.max(0.1, remainingMs / (1000 * 60 * 60));
     
-    const score = Math.round((task.estimatedMinutes * (100 - task.progressRate)) / (remainingHours + 1));
+    const estimated = task.estimatedMinutes || 60;
+    const score = Math.round((estimated * (100 - task.progressRate)) / (remainingHours + 1));
     return score;
   };
+
+  // 現在のアクティブグループ一覧 (ルーム別)
+  const activeGroups = activeRoomId ? (roomGroups[activeRoomId] || []) : [];
 
   // 現在のルームと選択グループに適合するタスクのソート＆フィルタリング
   const getFilteredAndSortedTasks = () => {
@@ -266,14 +282,16 @@ export const TasknowEvolution: React.FC = () => {
 
     setTasks(prev => prev.map(t => {
       if (t.id !== largeId) return t;
-      const newMedium: MediumTask = {
+      const newMedium: TaskNode = {
         id: 'medium-' + Math.random().toString(36).substr(2, 9),
         title: inputTitle.trim(),
+        type: 'MEDIUM',
+        isCompleted: false,
         progressRate: 0,
-        subtasks: []
+        children: []
       };
       // 中タスクが追加されたら、大タスクの100%完了を解除して動的に計算状態に戻す
-      return calculateProgress({ ...t, progressRate: 0, subtasks: [...t.subtasks, newMedium] });
+      return calculateProgress({ ...t, isCompleted: false, children: [...t.children, newMedium] });
     }));
 
     setNewMediumInputs(prev => ({ ...prev, [largeId]: '' }));
@@ -287,17 +305,20 @@ export const TasknowEvolution: React.FC = () => {
 
     setTasks(prev => prev.map(t => {
       if (t.id !== largeId) return t;
-      const updatedSubtasks = t.subtasks.map(m => {
+      const updatedChildren = t.children.map(m => {
         if (m.id !== mediumId) return m;
-        const newSmall: SmallTask = {
+        const newSmall: TaskNode = {
           id: 'small-' + Math.random().toString(36).substr(2, 9),
           title: inputTitle.trim(),
-          completed: false
+          type: 'SMALL',
+          isCompleted: false,
+          progressRate: 0,
+          children: []
         };
         // 小タスク追加に伴い、中タスクの100%完了を解除して動的計算にする
-        return { ...m, progressRate: 0, subtasks: [...m.subtasks, newSmall] };
+        return { ...m, isCompleted: false, children: [...m.children, newSmall] };
       });
-      return calculateProgress({ ...t, subtasks: updatedSubtasks });
+      return calculateProgress({ ...t, children: updatedChildren });
     }));
 
     setNewSmallInputs(prev => ({ ...prev, [mediumId]: '' }));
@@ -307,15 +328,18 @@ export const TasknowEvolution: React.FC = () => {
   // --- 動的グループの追加・確認付き削除 ---
   const handleAddGroupSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newGroupNameInput.trim()) return;
+    if (!newGroupNameInput.trim() || !activeRoomId) return;
 
     const formattedName = newGroupNameInput.trim();
-    if (groups.includes(formattedName)) {
+    if (activeGroups.includes(formattedName)) {
       addToast('同名のグループがすでに存在します。', 'warning');
       return;
     }
 
-    setGroups(prev => [...prev, formattedName]);
+    setRoomGroups(prev => ({
+      ...prev,
+      [activeRoomId]: [...(prev[activeRoomId] || []), formattedName]
+    }));
     setSelectedGroup(formattedName);
     setNewGroupNameInput('');
     setShowAddGroupInput(false);
@@ -329,11 +353,14 @@ export const TasknowEvolution: React.FC = () => {
   };
 
   const executeDeleteGroup = (groupNameToDelete: string) => {
-    setGroups(prev => prev.filter(g => g !== groupNameToDelete));
+    setRoomGroups(prev => ({
+      ...prev,
+      [activeRoomId]: (prev[activeRoomId] || []).filter(g => g !== groupNameToDelete)
+    }));
     setTasks(prev => prev.filter(t => t.groupName !== groupNameToDelete));
     
     if (selectedGroup === groupNameToDelete) {
-      const remainingGroups = groups.filter(g => g !== groupNameToDelete);
+      const remainingGroups = activeGroups.filter(g => g !== groupNameToDelete);
       setSelectedGroup(remainingGroups.length > 0 ? remainingGroups[0] : '');
     }
     addToast(`グループ『${groupNameToDelete}』と紐づくタスクを削除しました`, 'warning');
@@ -352,7 +379,14 @@ export const TasknowEvolution: React.FC = () => {
 
     setRooms(prev => [...prev, newRoom]);
     setRoomMembers(prev => ({ ...prev, [newId]: ['自分 🙋‍♂️'] }));
+    // ルーム別に初期グループセットを自動構築（クリーンな分離）
+    setRoomGroups(prev => ({
+      ...prev,
+      [newId]: ['大学の講義 🌿', 'サークル 📣', 'プライベート ☕️']
+    }));
+    
     setActiveRoomId(newId);
+    setSelectedGroup('大学の講義 🌿');
     setNewRoomNameInput('');
     setShowCreateRoomModal(false);
     addToast(`シェアルーム『${newRoom.name}』を作成しました！`, 'success');
@@ -371,13 +405,21 @@ export const TasknowEvolution: React.FC = () => {
       delete updated[roomIdToDelete];
       return updated;
     });
+    setRoomGroups(prev => {
+      const updated = { ...prev };
+      delete updated[roomIdToDelete];
+      return updated;
+    });
 
     if (activeRoomId === roomIdToDelete) {
       const remainingRooms = rooms.filter(r => r.id !== roomIdToDelete);
       if (remainingRooms.length > 0) {
         setActiveRoomId(remainingRooms[0].id);
+        const nextGroups = roomGroups[remainingRooms[0].id] || [];
+        setSelectedGroup(nextGroups.length > 0 ? nextGroups[0] : '');
       } else {
         setActiveRoomId('');
+        setSelectedGroup('');
       }
     }
     addToast(`ルームを削除しました`, 'warning');
@@ -395,7 +437,7 @@ export const TasknowEvolution: React.FC = () => {
     }));
 
     addToast(`『${newMember}』を招待しました！`, 'success');
-    inviteNameInput && setInviteNameInput('');
+    setInviteNameInput('');
     setShowInviteModal(false);
   };
 
@@ -410,17 +452,17 @@ export const TasknowEvolution: React.FC = () => {
       return;
     }
 
-    if (!selectedGroup) {
-      addToast('グループを先に作成してください', 'warning');
+    if (!selectedGroup || !activeRoomId) {
+      addToast('ルームとグループを先に作成してください', 'warning');
       return;
     }
 
     let targetGroup = selectedGroup;
     let estimatedMinutes = 60;
 
-    // 自動分類ロジック
+    // 自動分類ロジック (現在のルームの独立グループと照合)
     const cleanText = inputText.toLowerCase();
-    const matchedCustomGroup = groups.find(g => {
+    const matchedCustomGroup = activeGroups.find(g => {
       const cleanGName = g.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "").trim().toLowerCase();
       return cleanGName && cleanText.includes(cleanGName);
     });
@@ -430,15 +472,15 @@ export const TasknowEvolution: React.FC = () => {
       estimatedMinutes = 90;
     } else {
       if (cleanText.includes('レポート') || cleanText.includes('講義') || cleanText.includes('テスト') || cleanText.includes('宿題') || cleanText.includes('ゼミ') || cleanText.includes('発表')) {
-        const found = groups.find(g => g.includes('講義'));
+        const found = activeGroups.find(g => g.includes('講義'));
         if (found) targetGroup = found;
         estimatedMinutes = 60;
       } else if (cleanText.includes('ミーティング') || cleanText.includes('新歓') || cleanText.includes('イベント') || cleanText.includes('合宿') || cleanText.includes('部活') || cleanText.includes('サークル')) {
-        const found = groups.find(g => g.includes('サークル'));
+        const found = activeGroups.find(g => g.includes('サークル'));
         if (found) targetGroup = found;
         estimatedMinutes = 120;
       } else if (cleanText.includes('買い物') || cleanText.includes('バイト') || cleanText.includes('デート') || cleanText.includes('旅行') || cleanText.includes('カフェ')) {
-        const found = groups.find(g => g.includes('プライベート'));
+        const found = activeGroups.find(g => g.includes('プライベート'));
         if (found) targetGroup = found;
         estimatedMinutes = 45;
       }
@@ -447,15 +489,17 @@ export const TasknowEvolution: React.FC = () => {
     const deadlineDate = new Date(`${taskDeadline}T18:00:00`);
 
     const onComplete = () => {
-      const newTask: LargeTask = {
+      const newTask: TaskNode = {
         id: 'large-' + Math.random().toString(36).substr(2, 9),
         roomId: activeRoomId,
         title: inputText.trim(),
+        type: 'LARGE',
+        isCompleted: false,
         progressRate: 0,
         estimatedMinutes,
         deadline: deadlineDate.toISOString(),
         groupName: targetGroup,
-        subtasks: []
+        children: []
       };
       
       setTasks(prev => [...prev, newTask]);
@@ -511,7 +555,7 @@ export const TasknowEvolution: React.FC = () => {
       return;
     }
 
-    const targetTask = roomTasks.find(t => t.subtasks.some(m => m.subtasks.length > 0));
+    const targetTask = roomTasks.find(t => t.children.some(m => m.children.length > 0));
     if (!targetTask) {
       addToast('同期シミュレート用の作業項目（小タスク）が登録されていません。', 'warning');
       return;
@@ -525,20 +569,20 @@ export const TasknowEvolution: React.FC = () => {
       setTasks(prev => prev.map(large => {
         if (large.id !== targetTask.id) return large;
 
-        const updatedSubtasks = large.subtasks.map(medium => {
+        const updatedChildren = large.children.map(medium => {
           let updated = false;
-          const updatedSmalls = medium.subtasks.map(small => {
-            if (!small.completed && !updated) {
+          const updatedSmalls = medium.children.map(small => {
+            if (!small.isCompleted && !updated) {
               simulatedTitle = small.title;
               updated = true;
-              return { ...small, completed: true };
+              return { ...small, isCompleted: true };
             }
             return small;
           });
-          return { ...medium, subtasks: updatedSmalls };
+          return { ...medium, children: updatedSmalls };
         });
 
-        return calculateProgress({ ...large, subtasks: updatedSubtasks });
+        return calculateProgress({ ...large, children: updatedChildren });
       }));
 
       if (simulatedTitle) {
@@ -576,7 +620,8 @@ export const TasknowEvolution: React.FC = () => {
   const getTasksForDay = (day: number) => {
     return tasks.filter(t => {
       if (t.roomId !== activeRoomId) return false;
-      const d = new Date(t.deadline);
+      const deadlineStr = t.deadline || new Date().toISOString();
+      const d = new Date(deadlineStr);
       return d.getDate() === day && d.getMonth() === 6 && d.getFullYear() === 2026;
     });
   };
@@ -645,6 +690,8 @@ export const TasknowEvolution: React.FC = () => {
                       <button
                         onClick={() => {
                           setActiveRoomId(room.id);
+                          const nextGroups = roomGroups[room.id] || [];
+                          setSelectedGroup(nextGroups.length > 0 ? nextGroups[0] : '');
                           setShowRoomDropdown(false);
                           addToast(`シェアルームを『${room.name}』に切り替えました`, 'info');
                         }}
@@ -749,9 +796,9 @@ export const TasknowEvolution: React.FC = () => {
           )}
         </div>
 
-        {/* --- グループフォルダ・カプセルバッジ --- */}
+        {/* --- グループフォルダ・カプセルバッジ (動的追加・削除) --- */}
         <div className="flex flex-wrap justify-center items-center gap-3 mb-6">
-          {groups.map(group => {
+          {activeGroups.map(group => {
             const isActive = selectedGroup === group;
             const count = getGroupTaskCount(group);
             return (
@@ -787,44 +834,46 @@ export const TasknowEvolution: React.FC = () => {
           })}
 
           {/* 動的グループ追加ボタン */}
-          <div className="relative">
-            {!showAddGroupInput ? (
-              <button
-                onClick={() => setShowAddGroupInput(true)}
-                className="flex items-center justify-center bg-[#F3EDE2] hover:bg-[#EAE3D8] text-[#3E3A35] w-9 h-9 rounded-full border border-[#EAE3D8] transition-all"
-                title="新しいグループを追加"
-              >
-                <FolderPlus size={16} />
-              </button>
-            ) : (
-              <form 
-                onSubmit={handleAddGroupSubmit}
-                className="flex items-center bg-[#FFFFFF] border border-[#EAE3D8] rounded-full p-1 shadow-sm gap-1 animate-fade-in"
-              >
-                <input
-                  type="text"
-                  placeholder="グループ名 (例: 就活 👔)"
-                  value={newGroupNameInput}
-                  onChange={(e) => setNewGroupNameInput(e.target.value)}
-                  className="px-3 py-1 outline-none text-xs bg-transparent border-none text-[#3E3A35] w-40"
-                  autoFocus
-                />
+          {activeRoomId && (
+            <div className="relative">
+              {!showAddGroupInput ? (
                 <button
-                  type="submit"
-                  className="bg-[#B5C7A3] text-[#3E3A35] text-xs font-bold px-3 py-1 rounded-full border-none cursor-pointer"
+                  onClick={() => setShowAddGroupInput(true)}
+                  className="flex items-center justify-center bg-[#F3EDE2] hover:bg-[#EAE3D8] text-[#3E3A35] w-9 h-9 rounded-full border border-[#EAE3D8] transition-all"
+                  title="新しいグループを追加"
                 >
-                  追加
+                  <FolderPlus size={16} />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setShowAddGroupInput(false)}
-                  className="text-xs text-[#8A7E72] px-2"
+              ) : (
+                <form 
+                  onSubmit={handleAddGroupSubmit}
+                  className="flex items-center bg-[#FFFFFF] border border-[#EAE3D8] rounded-full p-1 shadow-sm gap-1 animate-fade-in"
                 >
-                  閉
-                </button>
-              </form>
-            )}
-          </div>
+                  <input
+                    type="text"
+                    placeholder="グループ名 (例: 就活 👔)"
+                    value={newGroupNameInput}
+                    onChange={(e) => setNewGroupNameInput(e.target.value)}
+                    className="px-3 py-1 outline-none text-xs bg-transparent border-none text-[#3E3A35] w-40"
+                    autoFocus
+                  />
+                  <button
+                    type="submit"
+                    className="bg-[#B5C7A3] text-[#3E3A35] text-xs font-bold px-3 py-1 rounded-full border-none cursor-pointer"
+                  >
+                    追加
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddGroupInput(false)}
+                    className="text-xs text-[#8A7E72] px-2"
+                  >
+                    閉
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
         </div>
 
         {/* --- ビュー表示エリア (Empty Stateの制御) --- */}
@@ -833,9 +882,9 @@ export const TasknowEvolution: React.FC = () => {
             /* --- ルーム・グループが作成されていない時の案内 --- */
             <div className="p-12 text-center text-[#8A7E72] bg-[#FFFFFF] border border-[#EAE3D8] rounded-3xl shadow-sm flex flex-col items-center gap-3">
               <span className="text-4xl">👋</span>
-              <h3 className="font-extrabold text-sm text-[#3E3A35]">Tasknowへようこそ</h3>
+              <h3 className="font-extrabold text-sm text-[#3E3A35]">まずはシェアルームを作成または選択してください</h3>
               <p className="text-xs max-w-sm leading-relaxed">
-                まずは画面右上から **「シェアルーム」** を作成し、上部の「＋」ボタンから **「グループ（リスト）」** を追加して、タスクの準備を始めましょう。
+                画面右上から **「シェアルーム」** を作成し、上部の「＋」ボタンから **「グループ（リスト）」** を追加して、タスクの準備を始めましょう。
               </p>
             </div>
           ) : activeTab === 'list' ? (
@@ -854,7 +903,7 @@ export const TasknowEvolution: React.FC = () => {
                 ) : (
                   getFilteredAndSortedTasks().map(largeTask => {
                     const expanded = !!expandedTasks[largeTask.id];
-                    const isLargeCompleted = largeTask.progressRate === 100;
+                    const isLargeCompleted = largeTask.isCompleted;
                     return (
                       <div key={largeTask.id} className="relative overflow-hidden rounded-3xl animate-fade-in">
                         {/* スワイプ削除インジケータ */}
@@ -883,17 +932,17 @@ export const TasknowEvolution: React.FC = () => {
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3 flex-1">
                               
-                              {/* 1. 完了チェックボックス (子タスクがある場合は表示・クリック制御) */}
+                              {/* 完了チェックボックス */}
                               <TaskCheckbox 
                                 checked={isLargeCompleted}
                                 onChange={() => handleLargeTaskToggle(largeTask.id)}
-                                disabled={largeTask.subtasks.length > 0} // 子タスクがある場合は自動連動のため disabled
+                                disabled={largeTask.children.length > 0} // 子ノードがある場合は自動連動
                               />
 
-                              {/* 2. 展開用トグル領域 */}
+                              {/* 展開トグル領域 */}
                               <div className="flex items-center gap-2 flex-1" onClick={() => toggleExpand(largeTask.id)}>
                                 <div className="text-[#8A7E72]">
-                                  {largeTask.subtasks.length > 0 ? (
+                                  {largeTask.children.length > 0 ? (
                                     expanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />
                                   ) : (
                                     <div className="w-5" />
@@ -901,7 +950,6 @@ export const TasknowEvolution: React.FC = () => {
                                 </div>
 
                                 <div className="flex flex-col">
-                                  {/* 完了時にセージグリーン染め、打ち消し線、opacity-50演出 */}
                                   <span className={`font-extrabold text-base transition-all duration-300 ${
                                     isLargeCompleted 
                                       ? 'line-through text-[#B5C7A3] opacity-50' 
@@ -913,14 +961,14 @@ export const TasknowEvolution: React.FC = () => {
                                     <span className="flex items-center gap-0.5"><Clock size={11} />想定: {largeTask.estimatedMinutes}分</span>
                                     <span className="flex items-center gap-0.5 text-[#8BA6A9] font-bold">
                                       <DateIcon size={11} />
-                                      締切: {new Date(largeTask.deadline).toLocaleDateString()} {new Date(largeTask.deadline).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                      締切: {new Date(largeTask.deadline || '').toLocaleDateString()}
                                     </span>
                                   </div>
                                 </div>
                               </div>
                             </div>
 
-                            {/* 円形ゲージ ＆ AIスコア */}
+                            {/* 進捗ゲージ */}
                             <div className="flex items-center gap-3">
                               {aiSortActive && (
                                 <div className="bg-[#F3EDE2] text-[#3E3A35] border border-[#EAE3D8] text-[10px] font-extrabold px-2 py-1 rounded-md">
@@ -949,7 +997,7 @@ export const TasknowEvolution: React.FC = () => {
 
                           {/* 3階層アコーディオン */}
                           <AnimatePresence initial={false}>
-                            {expanded && largeTask.subtasks.length > 0 && (
+                            {expanded && largeTask.children.length > 0 && (
                               <motion.div
                                 initial={{ height: 0, opacity: 0 }}
                                 animate={{ height: 'auto', opacity: 1 }}
@@ -958,19 +1006,17 @@ export const TasknowEvolution: React.FC = () => {
                                 className="overflow-hidden border-t border-[#F3EDE2] pt-4 flex flex-col gap-4"
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                {largeTask.subtasks.map(mediumTask => {
-                                  const isMediumCompleted = mediumTask.progressRate === 100;
+                                {largeTask.children.map(mediumTask => {
+                                  const isMediumCompleted = mediumTask.isCompleted;
                                   return (
                                     <div key={mediumTask.id} className="bg-[#FDFBF7] p-4 rounded-2xl border border-[#EAE3D8] flex flex-col gap-3 animate-fade-in">
                                       <div className="flex justify-between items-center gap-2">
                                         <div className="flex items-center gap-2.5">
-                                          {/* 中タスクのチェックボックス */}
                                           <TaskCheckbox 
                                             checked={isMediumCompleted}
                                             onChange={() => handleMediumTaskToggle(largeTask.id, mediumTask.id)}
-                                            disabled={mediumTask.subtasks.length > 0}
+                                            disabled={mediumTask.children.length > 0}
                                           />
-                                          {/* 完了演出 */}
                                           <span className={`text-xs font-bold transition-all duration-300 ${
                                             isMediumCompleted 
                                               ? 'line-through text-[#B5C7A3] opacity-50' 
@@ -994,20 +1040,19 @@ export const TasknowEvolution: React.FC = () => {
 
                                       {/* 小タスク項目リスト */}
                                       <div className="flex flex-col gap-2 pl-2">
-                                        {mediumTask.subtasks.map(smallTask => (
+                                        {mediumTask.children.map(smallTask => (
                                           <label 
                                             key={smallTask.id} 
                                             className="flex items-center gap-2.5 text-xs text-[#8A7E72] hover:text-[#3E3A35] transition-colors cursor-pointer"
                                           >
                                             <input 
                                               type="checkbox"
-                                              checked={smallTask.completed}
+                                              checked={smallTask.isCompleted}
                                               onChange={() => handleSmallTaskToggle(largeTask.id, mediumTask.id, smallTask.id)}
                                               className="w-4 h-4 cursor-pointer accent-[#B5C7A3]"
                                             />
-                                            {/* 小タスク完了演出 */}
                                             <span className={`transition-all duration-300 ${
-                                              smallTask.completed 
+                                              smallTask.isCompleted 
                                                 ? 'line-through text-[#B5C7A3] opacity-50' 
                                                 : 'text-[#3E3A35]'
                                             }`}>
@@ -1217,7 +1262,7 @@ export const TasknowEvolution: React.FC = () => {
       {/* --- 新規シェアルーム作成モーダル --- */}
       {showCreateRoomModal && (
         <div className="fixed inset-0 bg-[#000000] bg-opacity-40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
-          <div className="bg-[#FFFFFF] border border-[#EAE3D8] rounded-3xl p-6 w-full max-w-sm shadow-xl">
+          <div className="bg-[#FFFFFF] border border-[#EAE3D8] rounded-3xl p-6 w-full max-w-sm shadow-xl animate-fade-in">
             <h3 className="text-sm font-extrabold text-[#3E3A35] mb-4">新規シェアルーム作成</h3>
             <form onSubmit={handleCreateRoomSubmit} className="flex flex-col gap-3">
               <input 
@@ -1255,7 +1300,7 @@ export const TasknowEvolution: React.FC = () => {
       {/* --- 他ユーザー招待モーダル --- */}
       {showInviteModal && (
         <div className="fixed inset-0 bg-[#000000] bg-opacity-40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
-          <div className="bg-[#FFFFFF] border border-[#EAE3D8] rounded-3xl p-6 w-full max-w-sm shadow-xl">
+          <div className="bg-[#FFFFFF] border border-[#EAE3D8] rounded-3xl p-6 w-full max-w-sm shadow-xl animate-fade-in">
             <h3 className="text-sm font-extrabold text-[#3E3A35] mb-4">メンバーを招待</h3>
             <form onSubmit={handleInviteSubmit} className="flex flex-col gap-3">
               <input 
