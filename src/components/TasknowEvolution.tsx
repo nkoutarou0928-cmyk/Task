@@ -238,7 +238,7 @@ export const TasknowEvolution: React.FC = () => {
     setExpandedTasks(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // AI流動的優先度スコア計算式
+  // 優先順スコア計算式（裏側の計算は維持）
   const getPriorityScore = (task: TaskNode) => {
     const deadlineStr = task.deadline || new Date().toISOString();
     const deadlineDate = new Date(deadlineStr);
@@ -253,7 +253,7 @@ export const TasknowEvolution: React.FC = () => {
   // 現在のアクティブグループ一覧 (ルーム別)
   const activeGroups = activeRoomId ? (roomGroups[activeRoomId] || []) : [];
 
-  // 現在のルームと選択グループに適合するタスクのソート＆フィルタリング
+  // 現在のルームと選択グループに適合するタスクの優先順ソート＆フィルタリング
   const getFilteredAndSortedTasks = () => {
     const filtered = tasks.filter(t => t.roomId === activeRoomId && t.groupName === selectedGroup);
     if (!aiSortActive) return filtered;
@@ -290,7 +290,6 @@ export const TasknowEvolution: React.FC = () => {
         progressRate: 0,
         children: []
       };
-      // 中タスクが追加されたら、大タスクの100%完了を解除して動的に計算状態に戻す
       return calculateProgress({ ...t, isCompleted: false, children: [...t.children, newMedium] });
     }));
 
@@ -315,7 +314,6 @@ export const TasknowEvolution: React.FC = () => {
           progressRate: 0,
           children: []
         };
-        // 小タスク追加に伴い、中タスクの100%完了を解除して動的計算にする
         return { ...m, isCompleted: false, children: [...m.children, newSmall] };
       });
       return calculateProgress({ ...t, children: updatedChildren });
@@ -346,7 +344,6 @@ export const TasknowEvolution: React.FC = () => {
     addToast(`グループ『${formattedName}』を作成しました！`, 'success');
   };
 
-  // 1回目のクリックで確認ダイアログを開く
   const handleGroupDeleteClick = (groupName: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setDeleteTarget({ type: 'group', id: groupName, name: groupName });
@@ -379,14 +376,15 @@ export const TasknowEvolution: React.FC = () => {
 
     setRooms(prev => [...prev, newRoom]);
     setRoomMembers(prev => ({ ...prev, [newId]: ['自分 🙋‍♂️'] }));
-    // ルーム別に初期グループセットを自動構築（クリーンな分離）
+    
+    // 修正要件①：新規ルーム追加時はデフォルトグループを追加せず「完全な空スタート」
     setRoomGroups(prev => ({
       ...prev,
-      [newId]: ['大学の講義 🌿', 'サークル 📣', 'プライベート ☕️']
+      [newId]: []
     }));
     
     setActiveRoomId(newId);
-    setSelectedGroup('大学の講義 🌿');
+    setSelectedGroup('');
     setNewRoomNameInput('');
     setShowCreateRoomModal(false);
     addToast(`シェアルーム『${newRoom.name}』を作成しました！`, 'success');
@@ -460,7 +458,7 @@ export const TasknowEvolution: React.FC = () => {
     let targetGroup = selectedGroup;
     let estimatedMinutes = 60;
 
-    // 自動分類ロジック (現在のルームの独立グループと照合)
+    // 自動分類ロジック
     const cleanText = inputText.toLowerCase();
     const matchedCustomGroup = activeGroups.find(g => {
       const cleanGName = g.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "").trim().toLowerCase();
@@ -545,7 +543,7 @@ export const TasknowEvolution: React.FC = () => {
     }
   };
 
-  // チームルーム同期デモ (Websocket風モック)
+  // チームルーム同期デモ
   const triggerSyncDemo = () => {
     if (syncing) return;
 
@@ -754,7 +752,7 @@ export const TasknowEvolution: React.FC = () => {
 
       {/* --- メインコンテンツ --- */}
       <main className="w-full max-w-2xl px-6 mt-6 flex-1 flex flex-col">
-        {/* リスト・カレンダー切り替え & AIソートトグル */}
+        {/* リスト・カレンダー切り替え & 優先順ソートトグル (修正要件④: 表記変更) */}
         <div className="flex justify-between items-center mb-6">
           <div className="flex bg-[#F3EDE2] p-1 rounded-xl border border-[#EAE3D8]">
             <button
@@ -777,12 +775,12 @@ export const TasknowEvolution: React.FC = () => {
             </button>
           </div>
 
-          {/* AIソートトグル */}
+          {/* 優先順ソートトグル */}
           {activeTab === 'list' && (
             <button
               onClick={() => {
                 setAiSortActive(!aiSortActive);
-                addToast(`AI優先度ソートを${!aiSortActive ? 'ON' : 'OFF'}にしました`, 'info');
+                addToast(`優先順ソートを${!aiSortActive ? 'ON' : 'OFF'}にしました`, 'info');
               }}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold transition-all border ${
                 aiSortActive 
@@ -791,7 +789,7 @@ export const TasknowEvolution: React.FC = () => {
               }`}
             >
               <Zap size={14} />
-              AIソート: {aiSortActive ? 'ON' : 'OFF'}
+              優先順: {aiSortActive ? 'ON' : 'OFF'}
             </button>
           )}
         </div>
@@ -876,7 +874,7 @@ export const TasknowEvolution: React.FC = () => {
           )}
         </div>
 
-        {/* --- ビュー表示エリア (Empty Stateの制御) --- */}
+        {/* --- ビュー表示エリア --- */}
         <div className="flex-1">
           {(!activeRoomId || !selectedGroup) ? (
             /* --- ルーム・グループが作成されていない時の案内 --- */
@@ -936,7 +934,7 @@ export const TasknowEvolution: React.FC = () => {
                               <TaskCheckbox 
                                 checked={isLargeCompleted}
                                 onChange={() => handleLargeTaskToggle(largeTask.id)}
-                                disabled={largeTask.children.length > 0} // 子ノードがある場合は自動連動
+                                disabled={largeTask.children.length > 0}
                               />
 
                               {/* 展開トグル領域 */}
@@ -968,13 +966,8 @@ export const TasknowEvolution: React.FC = () => {
                               </div>
                             </div>
 
-                            {/* 進捗ゲージ */}
+                            {/* 進捗ゲージ (修正要件③: AIスコアの数値表示を視覚的に削除) */}
                             <div className="flex items-center gap-3">
-                              {aiSortActive && (
-                                <div className="bg-[#F3EDE2] text-[#3E3A35] border border-[#EAE3D8] text-[10px] font-extrabold px-2 py-1 rounded-md">
-                                  スコア: {getPriorityScore(largeTask)}
-                                </div>
-                              )}
                               <div className="relative w-12 h-12 flex items-center justify-center">
                                 <svg className="w-12 h-12 transform -rotate-90">
                                   <circle cx="24" cy="24" r="18" stroke="#F3EDE2" strokeWidth="3" fill="transparent" />
