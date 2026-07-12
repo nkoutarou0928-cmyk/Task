@@ -142,40 +142,54 @@ app.get("/api/v1/tasks", async (req, res) => {
 
 // Create task
 app.post("/api/v1/tasks", authenticateJWT, async (req: any, res) => {
-  const { title, estimated_minutes, deadline, team_id, assigned_user_id, parent_id } = req.body;
+  try {
+    const { title, estimated_minutes, deadline, team_id, assigned_user_id, parent_id } = req.body;
 
-  // Authorization check: if task belongs to a team, verify user is in that team
-  if (team_id) {
-    const membership = await prisma.teamMember.findUnique({
-      where: { team_id_user_id: { team_id, user_id: req.user.id } },
-    });
-    if (!membership) {
-      return res.status(403).json({ error: "Access denied: You are not a member of this team" });
+    if (!title || !title.trim()) {
+      return res.status(400).json({ error: "タスクタイトルは必須です。" });
     }
+
+    const parsedDeadline = new Date(deadline);
+    if (isNaN(parsedDeadline.getTime())) {
+      return res.status(400).json({ error: "締切日時の形式が無効です。" });
+    }
+
+    // Authorization check: if task belongs to a team, verify user is in that team
+    if (team_id) {
+      const membership = await prisma.teamMember.findUnique({
+        where: { team_id_user_id: { team_id, user_id: req.user.id } },
+      });
+      if (!membership) {
+        return res.status(403).json({ error: "Access denied: You are not a member of this team" });
+      }
+    }
+
+    const task = await prisma.task.create({
+      data: {
+        title,
+        estimated_minutes: Number(estimated_minutes) || 0,
+        deadline: parsedDeadline,
+        team_id: team_id || null,
+        assigned_user_id: assigned_user_id || null,
+        parent_id: parent_id || null,
+        progress_rate: 0,
+      },
+    });
+
+    await rebuildAllParentProgress();
+
+    broadcast({
+      type: "TASK_CREATED",
+      taskId: task.id,
+      updater: req.user.name,
+      message: `${req.user.name}が新しいタスク『${title}』を作成しました。`,
+    });
+
+    res.json(task);
+  } catch (error: any) {
+    console.error("Error creating task in POST /api/v1/tasks:", error);
+    res.status(500).json({ error: error.message || "タスク作成に失敗しました。" });
   }
-
-  const task = await prisma.task.create({
-    data: {
-      title,
-      estimated_minutes: Number(estimated_minutes),
-      deadline: new Date(deadline),
-      team_id: team_id || null,
-      assigned_user_id: assigned_user_id || null,
-      parent_id: parent_id || null,
-      progress_rate: 0,
-    },
-  });
-
-  await rebuildAllParentProgress();
-
-  broadcast({
-    type: "TASK_CREATED",
-    taskId: task.id,
-    updater: req.user.name,
-    message: `${req.user.name}が新しいタスク『${title}』を作成しました。`,
-  });
-
-  res.json(task);
 });
 
 // Update task progress
@@ -255,35 +269,49 @@ app.post("/api/v1/tasks/:id/complete", authenticateJWT, async (req: any, res) =>
 
 // Update general task details
 app.put("/api/v1/tasks/:id", authenticateJWT, async (req: any, res) => {
-  const { id } = req.params;
-  const { title, estimated_minutes, deadline, assigned_user_id, team_id } = req.body;
+  try {
+    const { id } = req.params;
+    const { title, estimated_minutes, deadline, assigned_user_id, team_id } = req.body;
 
-  const task = await prisma.task.findUnique({ where: { id } });
-  if (!task) {
-    return res.status(404).json({ error: "Task not found" });
+    const task = await prisma.task.findUnique({ where: { id } });
+    if (!task) {
+      return res.status(404).json({ error: "Task not found" });
+    }
+
+    if (!title || !title.trim()) {
+      return res.status(400).json({ error: "タスクタイトルは必須です。" });
+    }
+
+    const parsedDeadline = new Date(deadline);
+    if (isNaN(parsedDeadline.getTime())) {
+      return res.status(400).json({ error: "締切日時の形式が無効です。" });
+    }
+
+    const updatedTask = await prisma.task.update({
+      where: { id },
+      data: {
+        title,
+        estimated_minutes: Number(estimated_minutes) || 0,
+        deadline: parsedDeadline,
+        assigned_user_id: assigned_user_id || null,
+        team_id: team_id || null,
+      },
+    });
+
+    await rebuildAllParentProgress();
+
+    broadcast({
+      type: "TASK_DETAILS_UPDATED",
+      taskId: id,
+      updater: req.user.name,
+      message: `${req.user.name}が『${title}』の詳細情報を更新しました。`,
+    });
+
+    res.json(updatedTask);
+  } catch (error: any) {
+    console.error("Error updating task in PUT /api/v1/tasks/:id:", error);
+    res.status(500).json({ error: error.message || "タスク更新に失敗しました。" });
   }
-
-  const updatedTask = await prisma.task.update({
-    where: { id },
-    data: {
-      title,
-      estimated_minutes: Number(estimated_minutes),
-      deadline: new Date(deadline),
-      assigned_user_id: assigned_user_id || null,
-      team_id: team_id || null,
-    },
-  });
-
-  await rebuildAllParentProgress();
-
-  broadcast({
-    type: "TASK_DETAILS_UPDATED",
-    taskId: id,
-    updater: req.user.name,
-    message: `${req.user.name}が『${title}』の詳細情報を更新しました。`,
-  });
-
-  res.json(updatedTask);
 });
 
 // Delete task

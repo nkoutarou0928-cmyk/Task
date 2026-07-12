@@ -556,10 +556,16 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({ task, parentId, te
       return;
     }
 
+    const parsedDate = new Date(deadline);
+    if (isNaN(parsedDate.getTime())) {
+      alert('無効な締切日時です。正しい日時を入力してください。');
+      return;
+    }
+
     const taskData = {
       title,
       estimated_minutes: Number(estimatedMinutes),
-      deadline: new Date(deadline).toISOString(),
+      deadline: parsedDate.toISOString(),
       assigned_user_id: assignedUserId || null,
       team_id: selectedTeamId || null,
     };

@@ -33,16 +33,17 @@ model TeamMember {
 }
 
 model Task {
-  id                String   @id @default(uuid())
-  title             String
-  parent_id         String?
-  parent            Task?    @relation("TaskToTask", fields: [parent_id], references: [id], onDelete: Cascade)
-  subtasks          Task[]   @relation("TaskToTask")
-  estimated_minutes Int
-  progress_rate     Int      @default(0)
-  deadline          DateTime
-  team_id           String?
-  team              Team?    @relation(fields: [team_id], references: [id], onDelete: Cascade)
-  assigned_user_id  String?
-  assigned_user     User?    @relation(fields: [assigned_user_id], references: [id], onDelete: SetNull)
+  id               String   @id @default(uuid())
+  title            String
+  parentId         String?
+  parent           Task?    @relation("TaskToSubtask", fields: [parentId], references: [id], onDelete: Cascade)
+  subtasks         Task[]   @relation("TaskToSubtask")
+  estimatedMinutes Int      @default(0)
+  progressRate     Int      @default(0)
+  deadline         DateTime
+  groupName        String   @default("大学の講義")
+  team_id          String?
+  team             Team?    @relation(fields: [team_id], references: [id], onDelete: Cascade)
+  assigned_user_id String?
+  assigned_user    User?    @relation(fields: [assigned_user_id], references: [id], onDelete: SetNull)
 }
