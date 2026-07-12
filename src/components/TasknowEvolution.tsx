@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Trash2, 
@@ -17,7 +17,7 @@ import {
   Users
 } from 'lucide-react';
 
-// --- インターフェース定義 (完全な親子階層構造型) ---
+// --- インターフェース定義 (完全な再帰的サブタスク構造型) ---
 interface TaskNode {
   id: string;
   roomId?: string; // LARGE のみ保持
@@ -28,7 +28,7 @@ interface TaskNode {
   estimatedMinutes?: number; // LARGE のみ保持
   deadline?: string; // LARGE のみ保持 (ISO String)
   groupName?: string; // LARGE のみ保持
-  children: TaskNode[]; // 下位の階層ノードを保持 (LARGE ➔ MEDIUM ➔ SMALL)
+  subtasks: TaskNode[]; // 傘下の子タスクを配列で保持
 }
 
 interface Toast {
@@ -130,6 +130,9 @@ export const TasknowEvolution: React.FC = () => {
   // 同期シミュレーション状態
   const [syncing, setSyncing] = useState(false);
 
+  // 30秒自動消滅用のタイマー管理 Ref
+  const runningTimers = useRef<Record<string, NodeJS.Timeout>>({});
+
   // --- ヘルパー関数 ---
   // 進捗率の自動再計算 (小 ➔ 中 ➔ 大の完全階層連動)
   function calculateProgress(node: TaskNode): TaskNode {
@@ -141,19 +144,19 @@ export const TasknowEvolution: React.FC = () => {
     }
 
     // 下位階層の子タスクを再帰的に更新
-    const updatedChildren = node.children.map(calculateProgress);
+    const updatedSubtasks = node.subtasks.map(calculateProgress);
 
     let progressRate = 0;
     let isCompleted = false;
 
-    if (updatedChildren.length > 0) {
+    if (updatedSubtasks.length > 0) {
       if (node.type === 'MEDIUM') {
-        const completedCount = updatedChildren.filter(c => c.isCompleted).length;
-        progressRate = Math.round((completedCount / updatedChildren.length) * 100);
+        const completedCount = updatedSubtasks.filter(c => c.isCompleted).length;
+        progressRate = Math.round((completedCount / updatedSubtasks.length) * 100);
         isCompleted = progressRate === 100;
       } else if (node.type === 'LARGE') {
-        const totalProgress = updatedChildren.reduce((sum, child) => sum + child.progressRate, 0);
-        progressRate = Math.round(totalProgress / updatedChildren.length);
+        const totalProgress = updatedSubtasks.reduce((sum, child) => sum + child.progressRate, 0);
+        progressRate = Math.round(totalProgress / updatedSubtasks.length);
         isCompleted = progressRate === 100;
       }
     } else {
@@ -166,9 +169,64 @@ export const TasknowEvolution: React.FC = () => {
       ...node,
       progressRate,
       isCompleted,
-      children: updatedChildren
+      subtasks: updatedSubtasks
     };
   }
+
+  // 再帰的なノード削除
+  const deleteNode = (idToDelete: string) => {
+    setTasks(prev => {
+      const removeNode = (nodes: TaskNode[]): TaskNode[] => {
+        return nodes
+          .filter(n => n.id !== idToDelete)
+          .map(n => {
+            const updatedSubtasks = removeNode(n.subtasks);
+            return calculateProgress({
+              ...n,
+              subtasks: updatedSubtasks
+            });
+          });
+      };
+      return removeNode(prev);
+    });
+    addToast('完了した項目が自動消滅しました 🧹', 'info');
+  };
+
+  // --- 完了から30秒後の自動消滅タイマー監視ロジック ---
+  useEffect(() => {
+    const activeCompletedIds = new Set<string>();
+
+    // 再帰的にすべての完了ノードIDを抽出
+    const traverse = (node: TaskNode) => {
+      if (node.isCompleted) {
+        activeCompletedIds.add(node.id);
+      }
+      node.subtasks.forEach(traverse);
+    };
+    tasks.forEach(traverse);
+
+    // 1. 未完了に戻ったノードのタイマーを安全に解除
+    Object.keys(runningTimers.current).forEach(id => {
+      if (!activeCompletedIds.has(id)) {
+        clearTimeout(runningTimers.current[id]);
+        delete runningTimers.current[id];
+      }
+    });
+
+    // 2. 新規に完了したノードの30秒消滅タイマーを起動
+    activeCompletedIds.forEach(id => {
+      if (!runningTimers.current[id]) {
+        runningTimers.current[id] = setTimeout(() => {
+          deleteNode(id);
+          delete runningTimers.current[id];
+        }, 30000); // 30秒後
+      }
+    });
+
+    return () => {
+      // アンマウント時のタイマー解除
+    };
+  }, [tasks]);
 
   // トースト通知追加
   const addToast = (message: string, type: 'info' | 'success' | 'warning' = 'info') => {
@@ -184,20 +242,20 @@ export const TasknowEvolution: React.FC = () => {
     setTasks(prev => prev.map(large => {
       if (large.id !== largeId) return large;
       
-      const updatedChildren = large.children.map(medium => {
+      const updatedSubtasks = large.subtasks.map(medium => {
         if (medium.id !== mediumId) return medium;
         
-        const updatedSmalls = medium.children.map(small => {
+        const updatedSmalls = medium.subtasks.map(small => {
           if (small.id !== smallId) return small;
           const nextState = !small.isCompleted;
-          addToast(`『${small.title}』を${nextState ? '完了' : '未完了'}にしました`, 'info');
+          addToast(`『${small.title}』を${nextState ? '完了（30秒後に消滅）' : '未完了'}にしました`, 'info');
           return { ...small, isCompleted: nextState };
         });
         
-        return { ...medium, children: updatedSmalls };
+        return { ...medium, subtasks: updatedSmalls };
       });
 
-      return calculateProgress({ ...large, children: updatedChildren });
+      return calculateProgress({ ...large, subtasks: updatedSubtasks });
     }));
   };
 
@@ -206,17 +264,16 @@ export const TasknowEvolution: React.FC = () => {
     setTasks(prev => prev.map(large => {
       if (large.id !== largeId) return large;
       
-      const updatedChildren = large.children.map(medium => {
+      const updatedSubtasks = large.subtasks.map(medium => {
         if (medium.id !== mediumId) return medium;
-        // 子タスクがある場合はトグル不可
-        if (medium.children.length > 0) return medium;
+        if (medium.subtasks.length > 0) return medium;
         
         const nextState = !medium.isCompleted;
-        addToast(`ステップ『${medium.title}』を${nextState ? '完了' : '未完了'}にしました`, 'info');
+        addToast(`ステップ『${medium.title}』を${nextState ? '完了（30秒後に消滅）' : '未完了'}にしました`, 'info');
         return { ...medium, isCompleted: nextState };
       });
 
-      return calculateProgress({ ...large, children: updatedChildren });
+      return calculateProgress({ ...large, subtasks: updatedSubtasks });
     }));
   };
 
@@ -224,11 +281,10 @@ export const TasknowEvolution: React.FC = () => {
   const handleLargeTaskToggle = (largeId: string) => {
     setTasks(prev => prev.map(large => {
       if (large.id !== largeId) return large;
-      // 子タスクがある場合はトグル不可
-      if (large.children.length > 0) return large;
+      if (large.subtasks.length > 0) return large;
       
       const nextState = !large.isCompleted;
-      addToast(`タスク『${large.title}』を${nextState ? '完了' : '未完了'}にしました`, 'info');
+      addToast(`タスク『${large.title}』を${nextState ? '完了（30秒後に消滅）' : '未完了'}にしました`, 'info');
       return { ...large, isCompleted: nextState };
     }));
   };
@@ -288,9 +344,9 @@ export const TasknowEvolution: React.FC = () => {
         type: 'MEDIUM',
         isCompleted: false,
         progressRate: 0,
-        children: []
+        subtasks: []
       };
-      return calculateProgress({ ...t, isCompleted: false, children: [...t.children, newMedium] });
+      return calculateProgress({ ...t, isCompleted: false, subtasks: [...t.subtasks, newMedium] });
     }));
 
     setNewMediumInputs(prev => ({ ...prev, [largeId]: '' }));
@@ -304,7 +360,7 @@ export const TasknowEvolution: React.FC = () => {
 
     setTasks(prev => prev.map(t => {
       if (t.id !== largeId) return t;
-      const updatedChildren = t.children.map(m => {
+      const updatedSubtasks = t.subtasks.map(m => {
         if (m.id !== mediumId) return m;
         const newSmall: TaskNode = {
           id: 'small-' + Math.random().toString(36).substr(2, 9),
@@ -312,11 +368,11 @@ export const TasknowEvolution: React.FC = () => {
           type: 'SMALL',
           isCompleted: false,
           progressRate: 0,
-          children: []
+          subtasks: []
         };
-        return { ...m, isCompleted: false, children: [...m.children, newSmall] };
+        return { ...m, isCompleted: false, subtasks: [...m.subtasks, newSmall] };
       });
-      return calculateProgress({ ...t, children: updatedChildren });
+      return calculateProgress({ ...t, subtasks: updatedSubtasks });
     }));
 
     setNewSmallInputs(prev => ({ ...prev, [mediumId]: '' }));
@@ -377,7 +433,6 @@ export const TasknowEvolution: React.FC = () => {
     setRooms(prev => [...prev, newRoom]);
     setRoomMembers(prev => ({ ...prev, [newId]: ['自分 🙋‍♂️'] }));
     
-    // 修正要件①：新規ルーム追加時はデフォルトグループを追加せず「完全な空スタート」
     setRoomGroups(prev => ({
       ...prev,
       [newId]: []
@@ -497,7 +552,7 @@ export const TasknowEvolution: React.FC = () => {
         estimatedMinutes,
         deadline: deadlineDate.toISOString(),
         groupName: targetGroup,
-        children: []
+        subtasks: []
       };
       
       setTasks(prev => [...prev, newTask]);
@@ -553,7 +608,7 @@ export const TasknowEvolution: React.FC = () => {
       return;
     }
 
-    const targetTask = roomTasks.find(t => t.children.some(m => m.children.length > 0));
+    const targetTask = roomTasks.find(t => t.subtasks.some(m => m.subtasks.length > 0));
     if (!targetTask) {
       addToast('同期シミュレート用の作業項目（小タスク）が登録されていません。', 'warning');
       return;
@@ -567,9 +622,9 @@ export const TasknowEvolution: React.FC = () => {
       setTasks(prev => prev.map(large => {
         if (large.id !== targetTask.id) return large;
 
-        const updatedChildren = large.children.map(medium => {
+        const updatedSubtasks = large.subtasks.map(medium => {
           let updated = false;
-          const updatedSmalls = medium.children.map(small => {
+          const updatedSmalls = medium.subtasks.map(small => {
             if (!small.isCompleted && !updated) {
               simulatedTitle = small.title;
               updated = true;
@@ -577,10 +632,10 @@ export const TasknowEvolution: React.FC = () => {
             }
             return small;
           });
-          return { ...medium, children: updatedSmalls };
+          return { ...medium, subtasks: updatedSmalls };
         });
 
-        return calculateProgress({ ...large, children: updatedChildren });
+        return calculateProgress({ ...large, subtasks: updatedSubtasks });
       }));
 
       if (simulatedTitle) {
@@ -752,7 +807,7 @@ export const TasknowEvolution: React.FC = () => {
 
       {/* --- メインコンテンツ --- */}
       <main className="w-full max-w-2xl px-6 mt-6 flex-1 flex flex-col">
-        {/* リスト・カレンダー切り替え & 優先順ソートトグル (修正要件④: 表記変更) */}
+        {/* リスト・カレンダー切り替え & 優先順ソートトグル */}
         <div className="flex justify-between items-center mb-6">
           <div className="flex bg-[#F3EDE2] p-1 rounded-xl border border-[#EAE3D8]">
             <button
@@ -886,11 +941,12 @@ export const TasknowEvolution: React.FC = () => {
               </p>
             </div>
           ) : activeTab === 'list' ? (
-            /* --- リストビュー --- */
+            /* --- リストビュー (AnimatePresenceで自動消滅を心地よくアニメーション) --- */
             <div className="flex flex-col gap-4">
               <AnimatePresence initial={false}>
                 {getFilteredAndSortedTasks().length === 0 ? (
                   <motion.div
+                    key="empty"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
@@ -903,7 +959,14 @@ export const TasknowEvolution: React.FC = () => {
                     const expanded = !!expandedTasks[largeTask.id];
                     const isLargeCompleted = largeTask.isCompleted;
                     return (
-                      <div key={largeTask.id} className="relative overflow-hidden rounded-3xl animate-fade-in">
+                      <motion.div 
+                        key={largeTask.id}
+                        initial={{ opacity: 0, y: 15 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                        transition={{ duration: 0.4, ease: 'easeOut' }}
+                        className="relative overflow-hidden rounded-3xl"
+                      >
                         {/* スワイプ削除インジケータ */}
                         <div className="absolute inset-0 bg-[#E6A79A] flex justify-end items-center pr-6 rounded-3xl pointer-events-none">
                           <span className="text-[#3E3A35] font-bold text-xs flex items-center gap-1">
@@ -920,9 +983,6 @@ export const TasknowEvolution: React.FC = () => {
                               handleDeleteTask(largeTask.id, largeTask.title);
                             }
                           }}
-                          initial={{ opacity: 0, y: 15 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.95 }}
                           whileDrag={{ scale: 1.02, boxShadow: '0px 10px 25px rgba(62, 58, 53, 0.1)' }}
                           className="relative bg-[#FFFFFF] border border-[#EAE3D8] rounded-3xl p-5 flex flex-col gap-4 cursor-pointer select-none"
                         >
@@ -934,13 +994,13 @@ export const TasknowEvolution: React.FC = () => {
                               <TaskCheckbox 
                                 checked={isLargeCompleted}
                                 onChange={() => handleLargeTaskToggle(largeTask.id)}
-                                disabled={largeTask.children.length > 0}
+                                disabled={largeTask.subtasks.length > 0}
                               />
 
                               {/* 展開トグル領域 */}
                               <div className="flex items-center gap-2 flex-1" onClick={() => toggleExpand(largeTask.id)}>
                                 <div className="text-[#8A7E72]">
-                                  {largeTask.children.length > 0 ? (
+                                  {largeTask.subtasks.length > 0 ? (
                                     expanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />
                                   ) : (
                                     <div className="w-5" />
@@ -966,7 +1026,7 @@ export const TasknowEvolution: React.FC = () => {
                               </div>
                             </div>
 
-                            {/* 進捗ゲージ (修正要件③: AIスコアの数値表示を視覚的に削除) */}
+                            {/* 進捗ゲージ */}
                             <div className="flex items-center gap-3">
                               <div className="relative w-12 h-12 flex items-center justify-center">
                                 <svg className="w-12 h-12 transform -rotate-90">
@@ -990,7 +1050,7 @@ export const TasknowEvolution: React.FC = () => {
 
                           {/* 3階層アコーディオン */}
                           <AnimatePresence initial={false}>
-                            {expanded && largeTask.children.length > 0 && (
+                            {expanded && largeTask.subtasks.length > 0 && (
                               <motion.div
                                 initial={{ height: 0, opacity: 0 }}
                                 animate={{ height: 'auto', opacity: 1 }}
@@ -999,7 +1059,7 @@ export const TasknowEvolution: React.FC = () => {
                                 className="overflow-hidden border-t border-[#F3EDE2] pt-4 flex flex-col gap-4"
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                {largeTask.children.map(mediumTask => {
+                                {largeTask.subtasks.map(mediumTask => {
                                   const isMediumCompleted = mediumTask.isCompleted;
                                   return (
                                     <div key={mediumTask.id} className="bg-[#FDFBF7] p-4 rounded-2xl border border-[#EAE3D8] flex flex-col gap-3 animate-fade-in">
@@ -1008,7 +1068,7 @@ export const TasknowEvolution: React.FC = () => {
                                           <TaskCheckbox 
                                             checked={isMediumCompleted}
                                             onChange={() => handleMediumTaskToggle(largeTask.id, mediumTask.id)}
-                                            disabled={mediumTask.children.length > 0}
+                                            disabled={mediumTask.subtasks.length > 0}
                                           />
                                           <span className={`text-xs font-bold transition-all duration-300 ${
                                             isMediumCompleted 
@@ -1033,26 +1093,30 @@ export const TasknowEvolution: React.FC = () => {
 
                                       {/* 小タスク項目リスト */}
                                       <div className="flex flex-col gap-2 pl-2">
-                                        {mediumTask.children.map(smallTask => (
-                                          <label 
-                                            key={smallTask.id} 
-                                            className="flex items-center gap-2.5 text-xs text-[#8A7E72] hover:text-[#3E3A35] transition-colors cursor-pointer"
-                                          >
-                                            <input 
-                                              type="checkbox"
-                                              checked={smallTask.isCompleted}
-                                              onChange={() => handleSmallTaskToggle(largeTask.id, mediumTask.id, smallTask.id)}
-                                              className="w-4 h-4 cursor-pointer accent-[#B5C7A3]"
-                                            />
-                                            <span className={`transition-all duration-300 ${
-                                              smallTask.isCompleted 
-                                                ? 'line-through text-[#B5C7A3] opacity-50' 
-                                                : 'text-[#3E3A35]'
-                                            }`}>
-                                              {smallTask.title}
-                                            </span>
-                                          </label>
-                                        ))}
+                                        <AnimatePresence initial={false}>
+                                          {mediumTask.subtasks.map(smallTask => (
+                                            <motion.label 
+                                              key={smallTask.id} 
+                                              initial={{ opacity: 1, x: 0 }}
+                                              exit={{ opacity: 0, x: -10 }}
+                                              className="flex items-center gap-2.5 text-xs text-[#8A7E72] hover:text-[#3E3A35] transition-colors cursor-pointer"
+                                            >
+                                              <input 
+                                                type="checkbox"
+                                                checked={smallTask.isCompleted}
+                                                onChange={() => handleSmallTaskToggle(largeTask.id, mediumTask.id, smallTask.id)}
+                                                className="w-4 h-4 cursor-pointer accent-[#B5C7A3]"
+                                              />
+                                              <span className={`transition-all duration-300 ${
+                                                smallTask.isCompleted 
+                                                  ? 'line-through text-[#B5C7A3] opacity-50' 
+                                                  : 'text-[#3E3A35]'
+                                              }`}>
+                                                {smallTask.title}
+                                              </span>
+                                            </motion.label>
+                                          ))}
+                                        </AnimatePresence>
                                       </div>
 
                                       {/* 小タスクインライン追加 */}
@@ -1102,7 +1166,7 @@ export const TasknowEvolution: React.FC = () => {
                             )}
                           </AnimatePresence>
                         </motion.div>
-                      </div>
+                      </motion.div>
                     );
                   })
                 )}
