@@ -14,8 +14,7 @@ import {
   Bell,
   Plus,
   FolderPlus,
-  Users,
-  CheckCircle2
+  Users
 } from 'lucide-react';
 
 // --- インターフェース定義 ---
