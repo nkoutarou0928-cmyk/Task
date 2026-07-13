@@ -143,6 +143,11 @@ export const TasknowEvolution: React.FC = () => {
   const [editTemplateLargeTitle, setEditTemplateLargeTitle] = useState('');
   const [editTemplateMediums, setEditTemplateMediums] = useState<string[]>(['']);
 
+  const [showStructuredTaskModal, setShowStructuredTaskModal] = useState(false);
+  const [structuredLargeTitle, setStructuredLargeTitle] = useState('');
+  const [structuredDeadline, setStructuredDeadline] = useState('');
+  const [structuredMediums, setStructuredMediums] = useState<string[]>(['']);
+
   // 2段階削除確認用のアクティブターゲット
   const [deleteTarget, setDeleteTarget] = useState<{
     type: 'group' | 'room';
@@ -784,6 +789,133 @@ export const TasknowEvolution: React.FC = () => {
   const handleDeleteTemplate = (id: string, name: string) => {
     setCustomTemplates(prev => prev.filter(t => t.id !== id));
     addToast(`テンプレート『${name}』を削除しました`, 'warning');
+  };
+
+  const handleStructuredTaskSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!structuredLargeTitle.trim() || !structuredDeadline) {
+      addToast('大タスク名と締切日は必須です。', 'warning');
+      return;
+    }
+    if (!selectedGroupId || !activeRoomId) {
+      addToast('ルームとグループを先に作成してください', 'warning');
+      return;
+    }
+
+    let targetGroupId = selectedGroupId;
+    
+    // 自動分類ロジック (大タスクの名称基準)
+    const cleanText = structuredLargeTitle.toLowerCase();
+    const matchedGroup = activeGroups.find(g => {
+      const cleanGName = g.name.toLowerCase();
+      return cleanGName && cleanText.includes(cleanGName);
+    });
+
+    if (matchedGroup) {
+      targetGroupId = matchedGroup.id;
+    } else {
+      if (cleanText.includes('レポート') || cleanText.includes('講義') || cleanText.includes('テスト') || cleanText.includes('宿題') || cleanText.includes('ゼミ') || cleanText.includes('発表')) {
+        const found = activeGroups.find(g => g.name.includes('講義') || g.name.includes('授業') || g.name.includes('テスト'));
+        if (found) targetGroupId = found.id;
+      } else if (cleanText.includes('ミーティング') || cleanText.includes('新歓') || cleanText.includes('イベント') || cleanText.includes('合宿') || cleanText.includes('部活') || cleanText.includes('サークル')) {
+        const found = activeGroups.find(g => g.name.includes('サークル') || g.name.includes('部活'));
+        if (found) targetGroupId = found.id;
+      } else if (cleanText.includes('買い物') || cleanText.includes('バイト') || cleanText.includes('デート') || cleanText.includes('旅行') || cleanText.includes('カフェ')) {
+        const found = activeGroups.find(g => g.name.includes('プライベート') || g.name.includes('個人') || g.name.includes('生活'));
+        if (found) targetGroupId = found.id;
+      }
+    }
+
+    const newLargeId = 'large-' + Math.random().toString(36).substr(2, 9);
+
+    const onComplete = () => {
+      setTasks(prev => {
+        let next = { ...prev };
+
+        const newLarge: Task = {
+          id: newLargeId,
+          roomId: activeRoomId,
+          groupId: targetGroupId,
+          title: structuredLargeTitle.trim(),
+          type: 'LARGE',
+          isCompleted: false,
+          status: 'active',
+          deletionTimerId: null,
+          deadline: structuredDeadline,
+          parentId: null,
+          childIds: []
+        };
+
+        next[newLargeId] = newLarge;
+
+        const childIds: string[] = [];
+        structuredMediums.filter(t => t.trim() !== '').forEach(mTitle => {
+          const mId = 'medium-' + Math.random().toString(36).substr(2, 9);
+          const newMedium: Task = {
+            id: mId,
+            roomId: activeRoomId,
+            groupId: targetGroupId,
+            title: mTitle.trim(),
+            type: 'MEDIUM',
+            isCompleted: false,
+            status: 'active',
+            deletionTimerId: null,
+            deadline: '',
+            parentId: newLargeId,
+            childIds: []
+          };
+          next[mId] = newMedium;
+          childIds.push(mId);
+        });
+
+        next[newLargeId].childIds = childIds;
+        next = propagateCompletionUpward(newLargeId, next);
+        return next;
+      });
+
+      setExpandedTasks(prev => ({ ...prev, [newLargeId]: true }));
+      addToast(`タスク『${structuredLargeTitle}』を追加しました！`, 'success');
+    };
+
+    const inputEl = document.getElementById('slime-input-container');
+    const badgeEl = document.getElementById(`badge-item-${targetGroupId}`);
+
+    if (inputEl && badgeEl) {
+      const inputRect = inputEl.getBoundingClientRect();
+      const badgeRect = badgeEl.getBoundingClientRect();
+
+      const startX = inputRect.left + inputRect.width / 2;
+      const startY = inputRect.top;
+      const endX = badgeRect.left + badgeRect.width / 2;
+      const endY = badgeRect.top + badgeRect.height / 2;
+
+      setSlimeAnim({
+        active: true,
+        text: structuredLargeTitle,
+        targetGroupId,
+        startX,
+        startY,
+        endX,
+        endY
+      });
+
+      setTimeout(() => {
+        const targetBadge = document.getElementById(`badge-item-${targetGroupId}`);
+        if (targetBadge) {
+          targetBadge.classList.add('slime-bounce-active');
+          setTimeout(() => targetBadge.classList.remove('slime-bounce-active'), 500);
+        }
+        onComplete();
+        setSlimeAnim(null);
+      }, 800);
+    } else {
+      onComplete();
+    }
+
+    setStructuredLargeTitle('');
+    setStructuredDeadline('');
+    setStructuredMediums(['']);
+    setShowStructuredTaskModal(false);
   };
 
   // --- 1行入力送信 ➔ 放物線スライムジャンプ（簡易パース機能統合） ---
@@ -1623,6 +1755,20 @@ export const TasknowEvolution: React.FC = () => {
             )}
           </div>
 
+          {/* 📝 構造化タスク入力モーダルのトリガーボタン */}
+          <button
+            type="button"
+            onClick={() => {
+              setStructuredDeadline(taskDeadline); // 同期
+              setShowStructuredTaskModal(true);
+            }}
+            disabled={!activeRoomId || !selectedGroupId}
+            className="flex items-center justify-center bg-[#FFFFFF] border border-[#EAE3D8] hover:border-[#B5C7A3] disabled:opacity-50 disabled:pointer-events-none rounded-full w-9 h-9 cursor-pointer transition-all mr-2 text-[#8A7E72]"
+            title="ステップを指定してタスクを追加 📝"
+          >
+            <List size={14} />
+          </button>
+
           {/* インライン締切指定ピッカー */}
           <div 
             className={`flex items-center gap-1.5 bg-[#FFFFFF] border rounded-full px-3 py-1.5 mr-2 text-[#8A7E72] transition-all ${
@@ -1921,7 +2067,122 @@ export const TasknowEvolution: React.FC = () => {
           </div>
         </div>
       )}
+      {/* --- 構造化タスク入力モーダル --- */}
+      {showStructuredTaskModal && (
+        <div className="fixed inset-0 bg-[#000000] bg-opacity-40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
+          <div className="bg-[#FFFFFF] border border-[#EAE3D8] rounded-3xl p-6 w-full max-w-md shadow-xl animate-fade-in max-h-[85vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-extrabold text-[#3E3A35] flex items-center gap-1">
+                <List size={15} /> 構造化タスクの追加
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setShowStructuredTaskModal(false);
+                  setStructuredLargeTitle('');
+                  setStructuredDeadline('');
+                  setStructuredMediums(['']);
+                }} 
+                className="text-xs text-[#8A7E72] border-none bg-transparent cursor-pointer font-bold"
+              >
+                閉じる
+              </button>
+            </div>
 
+            <form onSubmit={handleStructuredTaskSubmit} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-[#8A7E72]">大タスク名 (必須)</label>
+                <input 
+                  type="text"
+                  placeholder="例: 数学のテスト 📝"
+                  value={structuredLargeTitle}
+                  onChange={(e) => setStructuredLargeTitle(e.target.value)}
+                  className="bg-[#F3EDE2] border border-[#EAE3D8] rounded-xl px-3 py-2 text-xs outline-none text-[#3E3A35]"
+                  required
+                />
+              </div>
+
+              {/* 締切入力フォーム (テラコッタ警告枠付き) */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-[#8A7E72]">締切日 (必須)</label>
+                <input 
+                  type="date"
+                  value={structuredDeadline}
+                  onChange={(e) => setStructuredDeadline(e.target.value)}
+                  className={`border rounded-xl px-3 py-2 text-xs outline-none text-[#3E3A35] cursor-pointer ${
+                    !structuredDeadline ? 'border-[#E6A79A] bg-[#FFF8F7]' : 'bg-[#F3EDE2] border-[#EAE3D8]'
+                  }`}
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-bold text-[#8A7E72]">中タスク（ステップ）のリスト</label>
+                <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto pr-1">
+                  {structuredMediums.map((m, idx) => (
+                    <div key={idx} className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        placeholder={`ステップ ${idx + 1}`}
+                        value={m}
+                        onChange={(e) => {
+                          const updated = [...structuredMediums];
+                          updated[idx] = e.target.value;
+                          setStructuredMediums(updated);
+                        }}
+                        className="flex-1 bg-[#F3EDE2] border border-[#EAE3D8] rounded-xl px-3 py-1.5 text-xs outline-none text-[#3E3A35]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStructuredMediums(prev => prev.filter((_, i) => i !== idx));
+                        }}
+                        className="text-[#E6A79A] hover:text-[#FF4D4D] border-none bg-transparent cursor-pointer font-bold px-1"
+                        title="ステップを削除"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setStructuredMediums(prev => [...prev, ''])}
+                  className="text-[10px] text-left text-[#8BA6A9] font-extrabold cursor-pointer border-none bg-transparent flex items-center gap-0.5"
+                >
+                  <Plus size={10} /> ステップを追加
+                </button>
+              </div>
+
+              <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-[#F3EDE2]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowStructuredTaskModal(false);
+                    setStructuredLargeTitle('');
+                    setStructuredDeadline('');
+                    setStructuredMediums(['']);
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs bg-[#F3EDE2] hover:bg-[#EAE3D8] text-[#8A7E72] font-semibold transition-all border-none cursor-pointer"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  disabled={!structuredLargeTitle.trim() || !structuredDeadline}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border-none cursor-pointer ${
+                    (!structuredLargeTitle.trim() || !structuredDeadline)
+                      ? 'bg-[#EAE3D8] text-[#B5A89E] opacity-50 cursor-not-allowed'
+                      : 'bg-[#B5C7A3] text-[#3E3A35]'
+                  }`}
+                >
+                  タスクを追加 ＋
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {/* --- 2段階削除確認ダイアログ (ダブルチェック) --- */}
       {deleteTarget && (
         <div className="fixed inset-0 bg-[#000000] bg-opacity-40 backdrop-blur-sm flex flex-col items-center justify-center z-[2000] p-4">
