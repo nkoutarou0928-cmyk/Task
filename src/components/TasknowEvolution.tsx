@@ -45,6 +45,13 @@ export interface ShareRoom {
   members: string[]; // 参加ユーザー名(アバター用)の配列
 }
 
+export interface TaskTemplate {
+  id: string;
+  name: string;
+  largeTitle: string;
+  mediumTitles: string[];
+}
+
 interface Toast {
   id: string;
   message: string;
@@ -111,6 +118,30 @@ export const TasknowEvolution: React.FC = () => {
   const [inviteNameInput, setInviteNameInput] = useState('');
 
   const [showTemplatePopup, setShowTemplatePopup] = useState(false);
+  const [customTemplates, setCustomTemplates] = useState<TaskTemplate[]>([
+    {
+      id: 'temp-report',
+      name: '【課題提出セット】',
+      largeTitle: 'レポート提出 📝',
+      mediumTitles: ['参考文献集め 📚', '構成案作成 🗒️', '執筆 ✍️']
+    },
+    {
+      id: 'temp-test',
+      name: '【テスト対策セット】',
+      largeTitle: 'テスト対策 ✍️',
+      mediumTitles: ['過去問を解く 📐', 'ノートの復習 ✏️']
+    },
+    {
+      id: 'temp-shift',
+      name: '【バイト・シフト】',
+      largeTitle: 'バイト出勤 💰',
+      mediumTitles: []
+    }
+  ]);
+  const [showTemplateManageModal, setShowTemplateManageModal] = useState(false);
+  const [editTemplateName, setEditTemplateName] = useState('');
+  const [editTemplateLargeTitle, setEditTemplateLargeTitle] = useState('');
+  const [editTemplateMediums, setEditTemplateMediums] = useState<string[]>(['']);
 
   // 2段階削除確認用のアクティブターゲット
   const [deleteTarget, setDeleteTarget] = useState<{
@@ -628,8 +659,8 @@ export const TasknowEvolution: React.FC = () => {
     setShowInviteModal(false);
   };
 
-  // --- よく使うタスクの「テンプレート（定型文）」機能 ---
-  const handleApplyTemplate = (type: 'report' | 'test' | 'shift') => {
+  // --- 定型タスクテンプレートの管理 & 適用ロジック ---
+  const handleApplyTemplate = (template: TaskTemplate) => {
     if (!taskDeadline) {
       addToast('締切日を設定してください 📅', 'warning');
       return;
@@ -637,19 +668,6 @@ export const TasknowEvolution: React.FC = () => {
     if (!selectedGroupId || !activeRoomId) {
       addToast('ルームとグループを先に作成してください', 'warning');
       return;
-    }
-
-    let largeTitle = '';
-    let subMediumTitles: string[] = [];
-
-    if (type === 'report') {
-      largeTitle = 'レポート提出 📝';
-      subMediumTitles = ['参考文献集め 📚', '構成案作成 🗒️', '執筆 ✍️'];
-    } else if (type === 'test') {
-      largeTitle = 'テスト対策 ✍️';
-      subMediumTitles = ['過去問を解く 📐', 'ノートの復習 ✏️'];
-    } else {
-      largeTitle = 'バイト出勤 💰';
     }
 
     const newLargeId = 'large-' + Math.random().toString(36).substr(2, 9);
@@ -662,7 +680,7 @@ export const TasknowEvolution: React.FC = () => {
           id: newLargeId,
           roomId: activeRoomId,
           groupId: selectedGroupId,
-          title: largeTitle,
+          title: template.largeTitle,
           type: 'LARGE',
           isCompleted: false,
           status: 'active',
@@ -675,13 +693,13 @@ export const TasknowEvolution: React.FC = () => {
         next[newLargeId] = newLarge;
 
         const childIds: string[] = [];
-        subMediumTitles.forEach(mTitle => {
+        template.mediumTitles.filter(t => t.trim() !== '').forEach(mTitle => {
           const mId = 'medium-' + Math.random().toString(36).substr(2, 9);
           const newMedium: Task = {
             id: mId,
             roomId: activeRoomId,
             groupId: selectedGroupId,
-            title: mTitle,
+            title: mTitle.trim(),
             type: 'MEDIUM',
             isCompleted: false,
             status: 'active',
@@ -700,7 +718,7 @@ export const TasknowEvolution: React.FC = () => {
       });
 
       setExpandedTasks(prev => ({ ...prev, [newLargeId]: true }));
-      addToast(`テンプレート『${largeTitle}』を展開しました！`, 'success');
+      addToast(`テンプレート『${template.largeTitle}』を展開しました！`, 'success');
     };
 
     const inputEl = document.getElementById('slime-input-container');
@@ -717,7 +735,7 @@ export const TasknowEvolution: React.FC = () => {
 
       setSlimeAnim({
         active: true,
-        text: largeTitle,
+        text: template.largeTitle,
         targetGroupId: selectedGroupId,
         startX,
         startY,
@@ -739,6 +757,33 @@ export const TasknowEvolution: React.FC = () => {
     }
 
     setShowTemplatePopup(false);
+  };
+
+  const handleSaveTemplate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editTemplateName.trim() || !editTemplateLargeTitle.trim()) {
+      addToast('テンプレート名と大タスク名は必須です。', 'warning');
+      return;
+    }
+
+    const newTemplate: TaskTemplate = {
+      id: 'temp-' + Math.random().toString(36).substr(2, 9),
+      name: editTemplateName.trim(),
+      largeTitle: editTemplateLargeTitle.trim(),
+      mediumTitles: editTemplateMediums.map(m => m.trim()).filter(Boolean)
+    };
+
+    setCustomTemplates(prev => [...prev, newTemplate]);
+    setEditTemplateName('');
+    setEditTemplateLargeTitle('');
+    setEditTemplateMediums(['']);
+    setShowTemplateManageModal(false);
+    addToast(`新規テンプレート『${newTemplate.name}』を登録しました！`, 'success');
+  };
+
+  const handleDeleteTemplate = (id: string, name: string) => {
+    setCustomTemplates(prev => prev.filter(t => t.id !== id));
+    addToast(`テンプレート『${name}』を削除しました`, 'warning');
   };
 
   // --- 1行入力送信 ➔ 放物線スライムジャンプ（簡易パース機能統合） ---
@@ -1548,30 +1593,30 @@ export const TasknowEvolution: React.FC = () => {
                 <div className="text-[10px] text-[#8A7E72] font-bold px-3 py-1.5 border-b border-[#F3EDE2]">
                   定型タスクテンプレート
                 </div>
-                <div className="flex flex-col gap-1.5 mt-1.5">
+                <div className="flex flex-col gap-1.5 mt-1.5 max-h-64 overflow-y-auto">
+                  {customTemplates.map(template => (
+                    <button
+                      key={template.id}
+                      type="button"
+                      onClick={() => handleApplyTemplate(template)}
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs hover:bg-[#FDFBF7] text-[#3E3A35] flex flex-col gap-0.5 border-none bg-transparent cursor-pointer"
+                    >
+                      <span className="font-extrabold text-[#3E3A35]">{template.name}</span>
+                      <span className="text-[9px] text-[#8A7E72] leading-tight">
+                        {template.largeTitle}{template.mediumTitles.length > 0 ? ` ➔ ${template.mediumTitles.join('、')}` : ''}
+                      </span>
+                    </button>
+                  ))}
+                  
                   <button
                     type="button"
-                    onClick={() => handleApplyTemplate('report')}
-                    className="w-full text-left px-3 py-2 rounded-xl text-xs hover:bg-[#FDFBF7] text-[#3E3A35] flex flex-col gap-0.5 border-none bg-transparent cursor-pointer"
+                    onClick={() => {
+                      setShowTemplateManageModal(true);
+                      setShowTemplatePopup(false);
+                    }}
+                    className="w-full text-center px-3 py-2 rounded-xl text-xs bg-[#B5C7A3] bg-opacity-20 text-[#3E3A35] font-extrabold border-none hover:bg-opacity-35 cursor-pointer mt-1"
                   >
-                    <span className="font-extrabold text-[#3E3A35]">【課題提出セット】</span>
-                    <span className="text-[9px] text-[#8A7E72] leading-tight">レポート提出 ➔ 参考文献集め、構成案作成、執筆</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleApplyTemplate('test')}
-                    className="w-full text-left px-3 py-2 rounded-xl text-xs hover:bg-[#FDFBF7] text-[#3E3A35] flex flex-col gap-0.5 border-none bg-transparent cursor-pointer"
-                  >
-                    <span className="font-extrabold text-[#3E3A35]">【テスト対策セット】</span>
-                    <span className="text-[9px] text-[#8A7E72] leading-tight">テスト対策 ➔ 過去問を解く、ノートの復習</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleApplyTemplate('shift')}
-                    className="w-full text-left px-3 py-2 rounded-xl text-xs hover:bg-[#FDFBF7] text-[#3E3A35] flex flex-col gap-0.5 border-none bg-transparent cursor-pointer"
-                  >
-                    <span className="font-extrabold text-[#3E3A35]">【バイト・シフト】</span>
-                    <span className="text-[9px] text-[#8A7E72] leading-tight">バイト出勤</span>
+                    ＋ テンプレートを管理・追加
                   </button>
                 </div>
               </div>
@@ -1726,6 +1771,150 @@ export const TasknowEvolution: React.FC = () => {
                   className="px-4 py-2 rounded-xl text-xs bg-[#B5C7A3] text-[#3E3A35] font-bold transition-all"
                 >
                   招待する
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- 定型タスクテンプレートの管理モーダル --- */}
+      {showTemplateManageModal && (
+        <div className="fixed inset-0 bg-[#000000] bg-opacity-40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
+          <div className="bg-[#FFFFFF] border border-[#EAE3D8] rounded-3xl p-6 w-full max-w-md shadow-xl animate-fade-in max-h-[85vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-extrabold text-[#3E3A35] flex items-center gap-1">
+                <Zap size={15} /> テンプレートの管理・追加
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setShowTemplateManageModal(false);
+                  setEditTemplateName('');
+                  setEditTemplateLargeTitle('');
+                  setEditTemplateMediums(['']);
+                }} 
+                className="text-xs text-[#8A7E72] border-none bg-transparent cursor-pointer font-bold"
+              >
+                閉じる
+              </button>
+            </div>
+
+            {/* 1. 登録済みテンプレート一覧 */}
+            <div className="mb-6 border-b border-[#F3EDE2] pb-4">
+              <span className="text-[10px] font-bold text-[#8A7E72] block mb-2">登録済みのテンプレート</span>
+              {customTemplates.length === 0 ? (
+                <div className="text-[11px] text-[#8A7E72] py-4 text-center bg-[#FDFBF7] border border-[#EAE3D8] rounded-2xl">
+                  テンプレートがありません
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2 max-h-40 overflow-y-auto">
+                  {customTemplates.map(t => (
+                    <div key={t.id} className="flex justify-between items-center bg-[#FDFBF7] border border-[#EAE3D8] rounded-xl px-3 py-2 text-xs">
+                      <div className="flex flex-col flex-1 min-w-0 pr-3">
+                        <span className="font-extrabold text-[#3E3A35] truncate">{t.name}</span>
+                        <span className="text-[10px] text-[#8A7E72] truncate">
+                          {t.largeTitle} {t.mediumTitles.length > 0 ? ` ➔ ${t.mediumTitles.join('、')}` : ''}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTemplate(t.id, t.name)}
+                        className="text-[#E6A79A] hover:text-[#FF4D4D] border-none bg-transparent cursor-pointer p-1"
+                        title="テンプレートを削除"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 2. 新規テンプレート作成フォーム */}
+            <form onSubmit={handleSaveTemplate} className="flex flex-col gap-4">
+              <span className="text-[10px] font-bold text-[#8A7E72] block -mb-2">新規テンプレートの登録</span>
+              
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-[#8A7E72]">テンプレート名</label>
+                <input 
+                  type="text"
+                  placeholder="例: 【ミーティング準備】"
+                  value={editTemplateName}
+                  onChange={(e) => setEditTemplateName(e.target.value)}
+                  className="bg-[#F3EDE2] border border-[#EAE3D8] rounded-xl px-3 py-2 text-xs outline-none text-[#3E3A35]"
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-[#8A7E72]">大タスク名</label>
+                <input 
+                  type="text"
+                  placeholder="例: ゼミ合宿の準備 👥"
+                  value={editTemplateLargeTitle}
+                  onChange={(e) => setEditTemplateLargeTitle(e.target.value)}
+                  className="bg-[#F3EDE2] border border-[#EAE3D8] rounded-xl px-3 py-2 text-xs outline-none text-[#3E3A35]"
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-bold text-[#8A7E72]">中タスク（ステップ）のリスト</label>
+                <div className="flex flex-col gap-1.5 max-h-36 overflow-y-auto pr-1">
+                  {editTemplateMediums.map((m, idx) => (
+                    <div key={idx} className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        placeholder={`ステップ ${idx + 1}`}
+                        value={m}
+                        onChange={(e) => {
+                          const updated = [...editTemplateMediums];
+                          updated[idx] = e.target.value;
+                          setEditTemplateMediums(updated);
+                        }}
+                        className="flex-1 bg-[#F3EDE2] border border-[#EAE3D8] rounded-xl px-3 py-1.5 text-xs outline-none text-[#3E3A35]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditTemplateMediums(prev => prev.filter((_, i) => i !== idx));
+                        }}
+                        className="text-[#E6A79A] hover:text-[#FF4D4D] border-none bg-transparent cursor-pointer font-bold px-1"
+                        title="ステップを削除"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditTemplateMediums(prev => [...prev, ''])}
+                  className="text-[10px] text-left text-[#8BA6A9] font-extrabold cursor-pointer border-none bg-transparent flex items-center gap-0.5"
+                >
+                  <Plus size={10} /> ステップを追加
+                </button>
+              </div>
+
+              <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-[#F3EDE2]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowTemplateManageModal(false);
+                    setEditTemplateName('');
+                    setEditTemplateLargeTitle('');
+                    setEditTemplateMediums(['']);
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs bg-[#F3EDE2] hover:bg-[#EAE3D8] text-[#8A7E72] font-semibold transition-all border-none cursor-pointer"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl text-xs bg-[#B5C7A3] text-[#3E3A35] font-bold transition-all border-none cursor-pointer"
+                >
+                  テンプレートを保存 ⚡
                 </button>
               </div>
             </form>
