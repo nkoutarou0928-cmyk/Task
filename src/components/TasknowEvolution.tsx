@@ -110,6 +110,8 @@ export const TasknowEvolution: React.FC = () => {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteNameInput, setInviteNameInput] = useState('');
 
+  const [showTemplatePopup, setShowTemplatePopup] = useState(false);
+
   // 2段階削除確認用のアクティブターゲット
   const [deleteTarget, setDeleteTarget] = useState<{
     type: 'group' | 'room';
@@ -626,7 +628,120 @@ export const TasknowEvolution: React.FC = () => {
     setShowInviteModal(false);
   };
 
-  // --- 1行入力送信 ➔ 放物線スライムジャンプ ---
+  // --- よく使うタスクの「テンプレート（定型文）」機能 ---
+  const handleApplyTemplate = (type: 'report' | 'test' | 'shift') => {
+    if (!taskDeadline) {
+      addToast('締切日を設定してください 📅', 'warning');
+      return;
+    }
+    if (!selectedGroupId || !activeRoomId) {
+      addToast('ルームとグループを先に作成してください', 'warning');
+      return;
+    }
+
+    let largeTitle = '';
+    let subMediumTitles: string[] = [];
+
+    if (type === 'report') {
+      largeTitle = 'レポート提出 📝';
+      subMediumTitles = ['参考文献集め 📚', '構成案作成 🗒️', '執筆 ✍️'];
+    } else if (type === 'test') {
+      largeTitle = 'テスト対策 ✍️';
+      subMediumTitles = ['過去問を解く 📐', 'ノートの復習 ✏️'];
+    } else {
+      largeTitle = 'バイト出勤 💰';
+    }
+
+    const newLargeId = 'large-' + Math.random().toString(36).substr(2, 9);
+
+    const onComplete = () => {
+      setTasks(prev => {
+        let next = { ...prev };
+
+        const newLarge: Task = {
+          id: newLargeId,
+          roomId: activeRoomId,
+          groupId: selectedGroupId,
+          title: largeTitle,
+          type: 'LARGE',
+          isCompleted: false,
+          status: 'active',
+          deletionTimerId: null,
+          deadline: taskDeadline,
+          parentId: null,
+          childIds: []
+        };
+
+        next[newLargeId] = newLarge;
+
+        const childIds: string[] = [];
+        subMediumTitles.forEach(mTitle => {
+          const mId = 'medium-' + Math.random().toString(36).substr(2, 9);
+          const newMedium: Task = {
+            id: mId,
+            roomId: activeRoomId,
+            groupId: selectedGroupId,
+            title: mTitle,
+            type: 'MEDIUM',
+            isCompleted: false,
+            status: 'active',
+            deletionTimerId: null,
+            deadline: '',
+            parentId: newLargeId,
+            childIds: []
+          };
+          next[mId] = newMedium;
+          childIds.push(mId);
+        });
+
+        next[newLargeId].childIds = childIds;
+        next = propagateCompletionUpward(newLargeId, next);
+        return next;
+      });
+
+      setExpandedTasks(prev => ({ ...prev, [newLargeId]: true }));
+      addToast(`テンプレート『${largeTitle}』を展開しました！`, 'success');
+    };
+
+    const inputEl = document.getElementById('slime-input-container');
+    const badgeEl = document.getElementById(`badge-item-${selectedGroupId}`);
+
+    if (inputEl && badgeEl) {
+      const inputRect = inputEl.getBoundingClientRect();
+      const badgeRect = badgeEl.getBoundingClientRect();
+
+      const startX = inputRect.left + inputRect.width / 2;
+      const startY = inputRect.top;
+      const endX = badgeRect.left + badgeRect.width / 2;
+      const endY = badgeRect.top + badgeRect.height / 2;
+
+      setSlimeAnim({
+        active: true,
+        text: largeTitle,
+        targetGroupId: selectedGroupId,
+        startX,
+        startY,
+        endX,
+        endY
+      });
+
+      setTimeout(() => {
+        const targetBadge = document.getElementById(`badge-item-${selectedGroupId}`);
+        if (targetBadge) {
+          targetBadge.classList.add('slime-bounce-active');
+          setTimeout(() => targetBadge.classList.remove('slime-bounce-active'), 500);
+        }
+        onComplete();
+        setSlimeAnim(null);
+      }, 800);
+    } else {
+      onComplete();
+    }
+
+    setShowTemplatePopup(false);
+  };
+
+  // --- 1行入力送信 ➔ 放物線スライムジャンプ（簡易パース機能統合） ---
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim()) return;
@@ -642,10 +757,20 @@ export const TasknowEvolution: React.FC = () => {
       return;
     }
 
+    // 記号を使った「1行クイック階層入力」ショートカットのパース
+    const cleanInput = inputText.trim();
+    const segments = cleanInput.split('>').map(s => s.trim()).filter(Boolean);
+
+    const largeTitle = segments[0] || '';
+    const mediumTitle = segments[1] || '';
+    const smallTitle = segments[2] || '';
+
+    if (!largeTitle) return;
+
     let targetGroupId = selectedGroupId;
 
     // 自動分類ロジック
-    const cleanText = inputText.toLowerCase();
+    const cleanText = largeTitle.toLowerCase();
     const matchedGroup = activeGroups.find(g => {
       const cleanGName = g.name.toLowerCase();
       return cleanGName && cleanText.includes(cleanGName);
@@ -668,28 +793,72 @@ export const TasknowEvolution: React.FC = () => {
 
     const onComplete = () => {
       const newLargeId = 'large-' + Math.random().toString(36).substr(2, 9);
-      const newTask: Task = {
-        id: newLargeId,
-        roomId: activeRoomId,
-        groupId: targetGroupId,
-        title: inputText.trim(),
-        type: 'LARGE',
-        isCompleted: false,
-        status: 'active',
-        deletionTimerId: null,
-        deadline: taskDeadline,
-        parentId: null,
-        childIds: []
-      };
-      
-      setTasks(prev => ({
-        ...prev,
-        [newLargeId]: newTask
-      }));
+      const newMediumId = 'medium-' + Math.random().toString(36).substr(2, 9);
+      const newSmallId = 'small-' + Math.random().toString(36).substr(2, 9);
+
+      setTasks(prev => {
+        let next = { ...prev };
+
+        const newLarge: Task = {
+          id: newLargeId,
+          roomId: activeRoomId,
+          groupId: targetGroupId,
+          title: largeTitle,
+          type: 'LARGE',
+          isCompleted: false,
+          status: 'active',
+          deletionTimerId: null,
+          deadline: taskDeadline,
+          parentId: null,
+          childIds: []
+        };
+
+        next[newLargeId] = newLarge;
+
+        if (mediumTitle) {
+          const newMedium: Task = {
+            id: newMediumId,
+            roomId: activeRoomId,
+            groupId: targetGroupId,
+            title: mediumTitle,
+            type: 'MEDIUM',
+            isCompleted: false,
+            status: 'active',
+            deletionTimerId: null,
+            deadline: '',
+            parentId: newLargeId,
+            childIds: []
+          };
+          next[newMediumId] = newMedium;
+          next[newLargeId].childIds = [newMediumId];
+
+          if (smallTitle) {
+            const newSmall: Task = {
+              id: newSmallId,
+              roomId: activeRoomId,
+              groupId: targetGroupId,
+              title: smallTitle,
+              type: 'SMALL',
+              isCompleted: false,
+              status: 'active',
+              deletionTimerId: null,
+              deadline: '',
+              parentId: newMediumId,
+              childIds: []
+            };
+            next[newSmallId] = newSmall;
+            next[newMediumId].childIds = [newSmallId];
+          }
+        }
+
+        next = propagateCompletionUpward(newLargeId, next);
+        return next;
+      });
+
       setInputText('');
       setTaskDeadline('');
       setExpandedTasks(prev => ({ ...prev, [newLargeId]: true }));
-      addToast(`タスク『${inputText}』を追加しました！`, 'success');
+      addToast(`タスク『${largeTitle}』を追加しました！`, 'success');
     };
 
     const inputEl = document.getElementById('slime-input-container');
@@ -706,7 +875,7 @@ export const TasknowEvolution: React.FC = () => {
 
       setSlimeAnim({
         active: true,
-        text: inputText,
+        text: largeTitle,
         targetGroupId,
         startX,
         startY,
@@ -1362,6 +1531,53 @@ export const TasknowEvolution: React.FC = () => {
           id="slime-input-container"
           className="flex items-center bg-[#F3EDE2] border border-[#EAE3D8] rounded-full px-4 py-2 shadow-md pointer-events-auto w-full transition-all duration-300 hover:shadow-lg"
         >
+          {/* ⚡ テンプレート選択ポップアップ */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowTemplatePopup(!showTemplatePopup)}
+              disabled={!activeRoomId || !selectedGroupId}
+              className="flex items-center justify-center bg-[#FFFFFF] border border-[#EAE3D8] hover:border-[#B5C7A3] disabled:opacity-50 disabled:pointer-events-none rounded-full w-9 h-9 cursor-pointer transition-all mr-2 text-[#8A7E72]"
+              title="定型タスクテンプレート ⚡"
+            >
+              <Zap size={14} />
+            </button>
+            
+            {showTemplatePopup && (
+              <div className="absolute bottom-12 left-0 w-64 bg-[#FFFFFF] border border-[#EAE3D8] rounded-2xl shadow-lg p-2.5 z-[200] pointer-events-auto animate-fade-in">
+                <div className="text-[10px] text-[#8A7E72] font-bold px-3 py-1.5 border-b border-[#F3EDE2]">
+                  定型タスクテンプレート
+                </div>
+                <div className="flex flex-col gap-1.5 mt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleApplyTemplate('report')}
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs hover:bg-[#FDFBF7] text-[#3E3A35] flex flex-col gap-0.5 border-none bg-transparent cursor-pointer"
+                  >
+                    <span className="font-extrabold text-[#3E3A35]">【課題提出セット】</span>
+                    <span className="text-[9px] text-[#8A7E72] leading-tight">レポート提出 ➔ 参考文献集め、構成案作成、執筆</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyTemplate('test')}
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs hover:bg-[#FDFBF7] text-[#3E3A35] flex flex-col gap-0.5 border-none bg-transparent cursor-pointer"
+                  >
+                    <span className="font-extrabold text-[#3E3A35]">【テスト対策セット】</span>
+                    <span className="text-[9px] text-[#8A7E72] leading-tight">テスト対策 ➔ 過去問を解く、ノートの復習</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyTemplate('shift')}
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs hover:bg-[#FDFBF7] text-[#3E3A35] flex flex-col gap-0.5 border-none bg-transparent cursor-pointer"
+                  >
+                    <span className="font-extrabold text-[#3E3A35]">【バイト・シフト】</span>
+                    <span className="text-[9px] text-[#8A7E72] leading-tight">バイト出勤</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* インライン締切指定ピッカー */}
           <div 
             className={`flex items-center gap-1.5 bg-[#FFFFFF] border rounded-full px-3 py-1.5 mr-2 text-[#8A7E72] transition-all ${
