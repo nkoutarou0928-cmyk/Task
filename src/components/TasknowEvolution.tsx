@@ -26,7 +26,7 @@ interface Task {
   isCompleted: boolean;
   progressRate: number; // LARGE と MEDIUM は下位から自動計算
   estimatedMinutes?: number; // LARGE のみ保持
-  deadline?: string; // LARGE のみ保持 (ISO String)
+  deadline: string; // 必須化 (LARGE 以外は空文字列)
   groupName?: string; // LARGE のみ保持
   subtasks: Task[]; // 傘下の子タスクを配列で保持
 }
@@ -344,6 +344,7 @@ export const TasknowEvolution: React.FC = () => {
         type: 'MEDIUM',
         isCompleted: false,
         progressRate: 0,
+        deadline: '',
         subtasks: []
       };
       return calculateProgress({ ...t, isCompleted: false, subtasks: [...t.subtasks, newMedium] });
@@ -368,6 +369,7 @@ export const TasknowEvolution: React.FC = () => {
           type: 'SMALL',
           isCompleted: false,
           progressRate: 0,
+          deadline: '',
           subtasks: []
         };
         return { ...m, isCompleted: false, subtasks: [...m.subtasks, newSmall] };
